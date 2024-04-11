@@ -4,7 +4,7 @@ pub const EOQ: char = '\0';
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
-    EOF,
+    Eoq,
     Error { msg: Box<str> },
 
     Colon,
@@ -43,7 +43,7 @@ pub enum TokenType {
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenType::EOF => f.write_str("end of query"),
+            TokenType::Eoq => f.write_str("end of query"),
             TokenType::Error { msg } => write!(f, "error: {}", *msg),
             TokenType::Colon => f.write_str("';'"),
             TokenType::Comma => f.write_str("','"),

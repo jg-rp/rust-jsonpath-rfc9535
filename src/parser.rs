@@ -13,7 +13,7 @@ use crate::{
 use TokenType::*;
 
 const EOF_TOKEN: Token = Token {
-    kind: EOF,
+    kind: Eoq,
     index: 0,
 };
 
@@ -43,7 +43,7 @@ impl Parser {
                 let segments = self.parse_segments(&mut it)?;
                 // parse_query should have consumed all tokens
                 match it.next() {
-                    Some(Token { kind: EOF, .. }) | None => Ok(segments),
+                    Some(Token { kind: Eoq, .. }) | None => Ok(segments),
                     Some(token) => Err(JSONPathError::syntax(
                         format!("expected end of query, found {}", token.kind),
                         token.index,
@@ -145,7 +145,7 @@ impl Parser {
                     let selector = self.parse_filter(it)?;
                     selectors.push(selector);
                 }
-                Token { kind: EOF, .. } => {
+                Token { kind: Eoq, .. } => {
                     return Err(JSONPathError::syntax(
                         String::from("unexpected end of query"),
                         token.index,
@@ -477,7 +477,7 @@ impl Parser {
         loop {
             match it.peek().unwrap_or(&EOF_TOKEN) {
                 Token {
-                    kind: EOF,
+                    kind: Eoq,
                     ref index,
                 } => {
                     return Err(JSONPathError::syntax(
@@ -658,7 +658,7 @@ impl Parser {
 
         loop {
             let peek_kind = &it.peek().unwrap_or(&EOF_TOKEN).kind;
-            if matches!(peek_kind, EOF | RBracket)
+            if matches!(peek_kind, Eoq | RBracket)
                 || self.precedence(peek_kind) < precedence
                 || !matches!(peek_kind, Eq | Ge | Gt | Le | Lt | Ne | And | Or)
             {

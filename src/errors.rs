@@ -10,19 +10,23 @@ pub enum JSONPathErrorType {
 
 #[derive(Debug)]
 pub struct JSONPathError {
-    pub error: JSONPathErrorType,
+    pub kind: JSONPathErrorType,
     pub msg: String,
     pub index: usize,
 }
 
 impl JSONPathError {
     pub fn new(error: JSONPathErrorType, msg: String, index: usize) -> Self {
-        Self { error, msg, index }
+        Self {
+            kind: error,
+            msg,
+            index,
+        }
     }
 
     pub fn syntax(msg: String, index: usize) -> Self {
         Self {
-            error: JSONPathErrorType::SyntaxError,
+            kind: JSONPathErrorType::SyntaxError,
             msg,
             index,
         }
@@ -30,7 +34,7 @@ impl JSONPathError {
 
     pub fn typ(msg: String, index: usize) -> Self {
         Self {
-            error: JSONPathErrorType::TypeError,
+            kind: JSONPathErrorType::TypeError,
             msg,
             index,
         }
@@ -38,9 +42,20 @@ impl JSONPathError {
 
     pub fn name(msg: String, index: usize) -> Self {
         Self {
-            error: JSONPathErrorType::NameError,
+            kind: JSONPathErrorType::NameError,
             msg,
             index,
+        }
+    }
+}
+
+impl fmt::Display for JSONPathErrorType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            JSONPathErrorType::LexerError => f.write_str("lexer error:"),
+            JSONPathErrorType::SyntaxError => f.write_str("syntax error:"),
+            JSONPathErrorType::TypeError => f.write_str("type error:"),
+            JSONPathErrorType::NameError => f.write_str("name error:"),
         }
     }
 }
@@ -49,20 +64,6 @@ impl std::error::Error for JSONPathError {}
 
 impl fmt::Display for JSONPathError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // TODO: move message prefix to Display for JSONPathErrorType
-        match self.error {
-            JSONPathErrorType::LexerError => {
-                write!(f, "lexer error: {} ({})", self.msg, self.index)
-            }
-            JSONPathErrorType::SyntaxError => {
-                write!(f, "syntax error: {} ({})", self.msg, self.index)
-            }
-            JSONPathErrorType::TypeError => {
-                write!(f, "type error: {} ({})", self.msg, self.index)
-            }
-            JSONPathErrorType::NameError => {
-                write!(f, "name error: {} ({})", self.msg, self.index)
-            }
-        }
+        write!(f, "{} {} ({})", self.kind, self.msg, self.index)
     }
 }

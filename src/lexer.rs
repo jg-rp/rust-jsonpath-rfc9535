@@ -1,6 +1,6 @@
 // TODO: docs
 use crate::{
-    errors::{JSONPathError, JSONPathErrorType},
+    errors::JSONPathError,
     token::{Token, TokenType, EOQ},
 };
 
@@ -192,11 +192,7 @@ pub fn lex(query: &str) -> Result<Vec<Token>, JSONPathError> {
             kind: TokenType::Error { msg },
             index,
             ..
-        }) => Err(JSONPathError {
-            error: JSONPathErrorType::SyntaxError,
-            msg: (*msg).to_string(),
-            index: *index,
-        }),
+        }) => Err(JSONPathError::syntax((*msg).to_string(), *index)),
         _ => Ok(tokens),
     }
 }
@@ -230,7 +226,7 @@ fn lex_segment(l: &mut Lexer) -> State {
         State::LexInsideFilter
     } else if l.peek() == EOQ {
         l.next();
-        l.emit(TokenType::EOF);
+        l.emit(TokenType::Eoq);
         State::EndOfQuery
     } else {
         let msg = format!(
@@ -717,7 +713,7 @@ mod tests {
                     },
                     6
                 ),
-                Token::new(TokenType::EOF, 9),
+                Token::new(TokenType::Eoq, 9),
             ]
         )
     }
@@ -746,7 +742,7 @@ mod tests {
                     10
                 ),
                 Token::new(TokenType::RBracket, 14),
-                Token::new(TokenType::EOF, 15),
+                Token::new(TokenType::Eoq, 15),
             ]
         )
     }
@@ -773,7 +769,7 @@ mod tests {
                     6
                 ),
                 Token::new(TokenType::RBracket, 7),
-                Token::new(TokenType::EOF, 8),
+                Token::new(TokenType::Eoq, 8),
             ]
         )
     }
@@ -800,7 +796,7 @@ mod tests {
                     6
                 ),
                 Token::new(TokenType::RBracket, 8),
-                Token::new(TokenType::EOF, 9),
+                Token::new(TokenType::Eoq, 9),
             ]
         )
     }
@@ -887,7 +883,7 @@ mod tests {
                     },
                     7
                 ),
-                Token::new(TokenType::EOF, 10),
+                Token::new(TokenType::Eoq, 10),
             ]
         )
     }
@@ -932,7 +928,7 @@ mod tests {
                     },
                     7
                 ),
-                Token::new(TokenType::EOF, 10),
+                Token::new(TokenType::Eoq, 10),
             ]
         )
     }
@@ -952,7 +948,7 @@ mod tests {
                     2
                 ),
                 Token::new(TokenType::Wild, 6),
-                Token::new(TokenType::EOF, 7),
+                Token::new(TokenType::Eoq, 7),
             ]
         )
     }
@@ -972,7 +968,7 @@ mod tests {
                     },
                     3
                 ),
-                Token::new(TokenType::EOF, 6),
+                Token::new(TokenType::Eoq, 6),
             ]
         )
     }
@@ -994,7 +990,7 @@ mod tests {
                     5
                 ),
                 Token::new(TokenType::RBracket, 9),
-                Token::new(TokenType::EOF, 10),
+                Token::new(TokenType::Eoq, 10),
             ]
         )
     }
@@ -1009,7 +1005,7 @@ mod tests {
                 Token::new(TokenType::Root, 0),
                 Token::new(TokenType::DoubleDot, 1),
                 Token::new(TokenType::Wild, 3),
-                Token::new(TokenType::EOF, 4),
+                Token::new(TokenType::Eoq, 4),
             ]
         )
     }
@@ -1078,7 +1074,7 @@ mod tests {
                     7
                 ),
                 Token::new(TokenType::RBracket, 11),
-                Token::new(TokenType::EOF, 12),
+                Token::new(TokenType::Eoq, 12),
             ]
         )
     }
@@ -1105,7 +1101,7 @@ mod tests {
                     7,
                 ),
                 Token::new(TokenType::RBracket, 11),
-                Token::new(TokenType::EOF, 12),
+                Token::new(TokenType::Eoq, 12),
             ]
         )
     }
@@ -1141,7 +1137,7 @@ mod tests {
                 Token::new(TokenType::Comma, 16),
                 Token::new(TokenType::Wild, 18),
                 Token::new(TokenType::RBracket, 19),
-                Token::new(TokenType::EOF, 20),
+                Token::new(TokenType::Eoq, 20),
             ]
         )
     }
@@ -1175,7 +1171,7 @@ mod tests {
                     8
                 ),
                 Token::new(TokenType::RBracket, 9),
-                Token::new(TokenType::EOF, 10),
+                Token::new(TokenType::Eoq, 10),
             ]
         )
     }
@@ -1204,7 +1200,7 @@ mod tests {
                     9
                 ),
                 Token::new(TokenType::RBracket, 12),
-                Token::new(TokenType::EOF, 13),
+                Token::new(TokenType::Eoq, 13),
             ]
         )
     }
@@ -1240,7 +1236,7 @@ mod tests {
                     17
                 ),
                 Token::new(TokenType::RBracket, 21),
-                Token::new(TokenType::EOF, 22),
+                Token::new(TokenType::Eoq, 22),
             ]
         )
     }
@@ -1276,7 +1272,7 @@ mod tests {
                     17
                 ),
                 Token::new(TokenType::RBracket, 21),
-                Token::new(TokenType::EOF, 22),
+                Token::new(TokenType::Eoq, 22),
             ]
         )
     }
@@ -1307,7 +1303,7 @@ mod tests {
                 ),
                 Token::new(TokenType::RParen, 13),
                 Token::new(TokenType::RBracket, 14),
-                Token::new(TokenType::EOF, 15),
+                Token::new(TokenType::Eoq, 15),
             ]
         )
     }
@@ -1345,7 +1341,7 @@ mod tests {
                     17
                 ),
                 Token::new(TokenType::RBracket, 20),
-                Token::new(TokenType::EOF, 21),
+                Token::new(TokenType::Eoq, 21),
             ]
         )
     }
@@ -1382,7 +1378,7 @@ mod tests {
                     16
                 ),
                 Token::new(TokenType::RBracket, 17),
-                Token::new(TokenType::EOF, 18),
+                Token::new(TokenType::Eoq, 18),
             ]
         )
     }
@@ -1426,7 +1422,7 @@ mod tests {
                     19
                 ),
                 Token::new(TokenType::RBracket, 20),
-                Token::new(TokenType::EOF, 21),
+                Token::new(TokenType::Eoq, 21),
             ]
         )
     }
@@ -1465,7 +1461,7 @@ mod tests {
                 ),
                 Token::new(TokenType::RParen, 18),
                 Token::new(TokenType::RBracket, 19),
-                Token::new(TokenType::EOF, 20),
+                Token::new(TokenType::Eoq, 20),
             ]
         )
     }
@@ -1513,7 +1509,7 @@ mod tests {
                 ),
                 Token::new(TokenType::RParen, 22),
                 Token::new(TokenType::RBracket, 23),
-                Token::new(TokenType::EOF, 24),
+                Token::new(TokenType::Eoq, 24),
             ]
         )
     }
@@ -1541,7 +1537,7 @@ mod tests {
                 ),
                 Token::new(TokenType::RBracket, 9),
                 Token::new(TokenType::RBracket, 10),
-                Token::new(TokenType::EOF, 11),
+                Token::new(TokenType::Eoq, 11),
             ]
         )
     }
@@ -1577,7 +1573,7 @@ mod tests {
                 ),
                 Token::new(TokenType::RBracket, 12),
                 Token::new(TokenType::RBracket, 13),
-                Token::new(TokenType::EOF, 14),
+                Token::new(TokenType::Eoq, 14),
             ]
         )
     }
@@ -1600,7 +1596,7 @@ mod tests {
                 ),
                 Token::new(TokenType::RParen, 7),
                 Token::new(TokenType::RBracket, 8),
-                Token::new(TokenType::EOF, 9),
+                Token::new(TokenType::Eoq, 9),
             ]
         )
     }
@@ -1629,7 +1625,7 @@ mod tests {
                 ),
                 Token::new(TokenType::RParen, 9),
                 Token::new(TokenType::RBracket, 10),
-                Token::new(TokenType::EOF, 11),
+                Token::new(TokenType::Eoq, 11),
             ]
         )
     }
@@ -1665,7 +1661,7 @@ mod tests {
                 ),
                 Token::new(TokenType::RParen, 13),
                 Token::new(TokenType::RBracket, 14),
-                Token::new(TokenType::EOF, 15),
+                Token::new(TokenType::Eoq, 15),
             ]
         )
     }
@@ -1684,7 +1680,7 @@ mod tests {
                 Token::new(TokenType::Eq, 7),
                 Token::new(TokenType::False, 9),
                 Token::new(TokenType::RBracket, 14),
-                Token::new(TokenType::EOF, 15),
+                Token::new(TokenType::Eoq, 15),
             ]
         )
     }
@@ -1703,7 +1699,7 @@ mod tests {
                 Token::new(TokenType::And, 8),
                 Token::new(TokenType::False, 11),
                 Token::new(TokenType::RBracket, 16),
-                Token::new(TokenType::EOF, 17),
+                Token::new(TokenType::Eoq, 17),
             ]
         )
     }
@@ -1733,7 +1729,7 @@ mod tests {
                     11
                 ),
                 Token::new(TokenType::RBracket, 15),
-                Token::new(TokenType::EOF, 16),
+                Token::new(TokenType::Eoq, 16),
             ]
         )
     }
