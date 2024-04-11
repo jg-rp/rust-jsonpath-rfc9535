@@ -719,7 +719,7 @@ impl Parser {
     fn assert_well_typed(
         &self,
         func_name: &str,
-        args: &Vec<FilterExpression>,
+        args: &[FilterExpression],
         token: &Token,
     ) -> Result<(), JSONPathError> {
         let signature = self.env.functions.get(func_name).ok_or_else(|| {
