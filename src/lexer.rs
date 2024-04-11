@@ -117,7 +117,6 @@ impl<'q> Lexer<'q> {
     }
 
     fn peek(&mut self) -> char {
-        // TODO: benchmark and try a peekable iterator instead
         if let Some((_, ch)) = self.chars.clone().next() {
             ch
         } else {
@@ -469,118 +468,14 @@ fn lex_inside_filter(l: &mut Lexer) -> State {
             State::LexInsideFilter
         }
         '-' => {
-            // TODO: refactor into lex_number
+            // negative number
             l.next();
-            if !l.accept_run(is_digit) {
-                let msg = format!("expected a digit, found '{}'", l.peek());
-                return l.error(msg);
-            }
-
-            if l.accept('.') {
-                // a float
-                if !l.accept_run(is_digit) {
-                    return l.error(String::from(
-                        "a fractional digit is required after a decimal point",
-                    ));
-                }
-
-                // exponent
-                if l.accept('e') {
-                    l.accept_if(|ch| ch == '+' || ch == '-');
-                    if !l.accept_run(is_digit) {
-                        return l.error(String::from("at least one exponent digit is required"));
-                    }
-                }
-
-                l.emit(TokenType::Float {
-                    value: l.boxed_value(),
-                });
-            } else {
-                // exponent
-                if l.accept('e') {
-                    if l.accept('-') {
-                        // emit a float if exponent is negative
-                        if !l.accept_run(is_digit) {
-                            return l
-                                .error(String::from("at least one exponent digit is required"));
-                        }
-                        l.emit(TokenType::Float {
-                            value: l.boxed_value(),
-                        });
-                    } else {
-                        l.accept('+');
-                        if !l.accept_run(is_digit) {
-                            return l
-                                .error(String::from("at least one exponent digit is required"));
-                        }
-                        l.emit(TokenType::Int {
-                            value: l.boxed_value(),
-                        })
-                    }
-                } else {
-                    l.emit(TokenType::Int {
-                        value: l.boxed_value(),
-                    })
-                }
-            }
-
-            State::LexInsideFilter
+            lex_number(l)
         }
-
         _ => {
-            // TODO: refactor into lex_number
-            // positive numbers
-            if l.accept_run(is_digit) {
-                if l.peek() == '.' {
-                    // a float
-                    l.next();
-                    if !l.accept_run(is_digit) {
-                        return l.error(String::from(
-                            "a fractional digit is required after a decimal point",
-                        ));
-                    }
-                    // exponent
-                    if l.accept('e') {
-                        l.accept_if(|ch| ch == '+' || ch == '-');
-                        if !l.accept_run(is_digit) {
-                            return l
-                                .error(String::from("at least one exponent digit is required"));
-                        }
-                    }
-                    l.emit(TokenType::Float {
-                        value: l.boxed_value(),
-                    });
-                } else {
-                    // an int
-                    // exponent?
-                    if l.accept('e') {
-                        if l.accept('-') {
-                            // emit a float if exponent is negative
-                            if !l.accept_run(is_digit) {
-                                return l.error(String::from(
-                                    "at least one exponent digit is required",
-                                ));
-                            }
-                            l.emit(TokenType::Float {
-                                value: l.boxed_value(),
-                            });
-                        } else {
-                            l.accept('+');
-                            if !l.accept_run(is_digit) {
-                                return l.error(String::from(
-                                    "at least one exponent digit is required",
-                                ));
-                            }
-                            l.emit(TokenType::Int {
-                                value: l.boxed_value(),
-                            })
-                        }
-                    } else {
-                        l.emit(TokenType::Int {
-                            value: l.boxed_value(),
-                        })
-                    }
-                }
+            if is_digit(l.peek()) {
+                // positive number
+                lex_number(l);
             } else if l.accept_run(is_function_name_first) {
                 // function name or keyword
                 l.accept_run(is_function_name_char);
@@ -650,6 +545,61 @@ fn lex_string(l: &mut Lexer, quote: char, next_state: State) -> State {
             }
         }
     }
+}
+
+fn lex_number(l: &mut Lexer) -> State {
+    if !l.accept_run(is_digit) {
+        let msg = format!("expected a digit, found '{}'", l.peek());
+        return l.error(msg);
+    }
+
+    if l.accept('.') {
+        // a float
+        if !l.accept_run(is_digit) {
+            return l.error(String::from(
+                "a fractional digit is required after a decimal point",
+            ));
+        }
+
+        // exponent
+        if l.accept('e') {
+            l.accept_if(|ch| ch == '+' || ch == '-');
+            if !l.accept_run(is_digit) {
+                return l.error(String::from("at least one exponent digit is required"));
+            }
+        }
+
+        l.emit(TokenType::Float {
+            value: l.boxed_value(),
+        });
+    } else {
+        // exponent
+        if l.accept('e') {
+            if l.accept('-') {
+                // emit a float if exponent is negative
+                if !l.accept_run(is_digit) {
+                    return l.error(String::from("at least one exponent digit is required"));
+                }
+                l.emit(TokenType::Float {
+                    value: l.boxed_value(),
+                });
+            } else {
+                l.accept('+');
+                if !l.accept_run(is_digit) {
+                    return l.error(String::from("at least one exponent digit is required"));
+                }
+                l.emit(TokenType::Int {
+                    value: l.boxed_value(),
+                })
+            }
+        } else {
+            l.emit(TokenType::Int {
+                value: l.boxed_value(),
+            })
+        }
+    }
+
+    State::LexInsideFilter
 }
 
 fn is_name_first(ch: char) -> bool {
