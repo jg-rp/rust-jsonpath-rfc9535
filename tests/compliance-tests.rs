@@ -34,6 +34,8 @@ macro_rules! assert_invalid {
     }
 }
 
+// These test cases are generated automatically by scripts/cts.py.
+
 assert_valid! {
     basic__root0: "$",
     basic__name_shorthand0: "$.a",

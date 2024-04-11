@@ -3,6 +3,7 @@ use crate::{
     errors::{JSONPathError, JSONPathErrorType},
     token::{Token, TokenType, EOQ},
 };
+
 use lazy_static::lazy_static;
 use std::{collections::HashSet, str::CharIndices};
 

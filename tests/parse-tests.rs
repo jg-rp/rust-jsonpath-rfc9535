@@ -1,10 +1,4 @@
-use rust_jsonpath::{env::Env, errors::JSONPathError, lexer::lex, parser::Parser, query::Query};
-
-use lazy_static::lazy_static;
-
-lazy_static! {
-    static ref PARSER: Parser = Parser::new(Env::standard());
-}
+use rust_jsonpath::{errors::JSONPathError, query::Query};
 
 macro_rules! parse_tests {
     ($($name:ident: $value:expr,)*) => {
@@ -14,10 +8,7 @@ macro_rules! parse_tests {
             #[test]
             fn $name() -> Result<(), JSONPathError> {
                 let (input, expected) = $value;
-                let tokens = lex(input)?;
-                let query = Query {
-                    segments: PARSER.parse(tokens)?,
-                };
+                let query = Query::new(input)?;
                 assert_eq!(format!("{}", query), expected);
                 Ok(())
             }

@@ -47,6 +47,8 @@ def main(path: str) -> None:
         for t in data["tests"]
     ]
 
+    # TODO: dedupe on selector (some test cases just differ in their data)
+
     valid_cases = [
         f"{snake_name(t.name)}: {encode_selector(t.selector)}"
         for t in test_cases
