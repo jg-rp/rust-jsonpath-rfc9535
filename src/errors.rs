@@ -5,12 +5,13 @@ pub enum JSONPathErrorType {
     LexerError,
     SyntaxError,
     TypeError,
+    NameError,
 }
 
 #[derive(Debug)]
 pub struct JSONPathError {
     pub error: JSONPathErrorType,
-    pub msg: String, // TODO: or Box<str>
+    pub msg: String,
     pub index: usize,
 }
 
@@ -34,6 +35,14 @@ impl JSONPathError {
             index,
         }
     }
+
+    pub fn name(msg: String, index: usize) -> Self {
+        Self {
+            error: JSONPathErrorType::NameError,
+            msg,
+            index,
+        }
+    }
 }
 
 impl std::error::Error for JSONPathError {}
@@ -50,6 +59,9 @@ impl fmt::Display for JSONPathError {
             }
             JSONPathErrorType::TypeError => {
                 write!(f, "type error: {} ({})", self.msg, self.index)
+            }
+            JSONPathErrorType::NameError => {
+                write!(f, "name error: {} ({})", self.msg, self.index)
             }
         }
     }

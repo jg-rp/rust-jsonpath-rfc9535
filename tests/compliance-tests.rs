@@ -400,6 +400,8 @@ assert_valid! {
     whitespace__slice__return_between_colon_and_step0: "$[1:5:\r2]",
 }
 
+// TODO: assert invalid macro
+
 #[test]
 #[should_panic]
 fn invalid_u13() {
@@ -416,4 +418,10 @@ fn invalid_escape() {
 #[should_panic(expected = "unclosed string")]
 fn invalid_unescaped_single_quote() {
     Query::new("$[''']").unwrap();
+}
+
+#[test]
+#[should_panic(expected = "argument 1 of count() must be of a 'Nodes' type")]
+fn function_expects_nodes_type() {
+    Query::new("$[?count(1)>2]").unwrap();
 }

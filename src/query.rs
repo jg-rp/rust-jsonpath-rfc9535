@@ -108,7 +108,7 @@ impl fmt::Display for Segment {
 pub enum Selector {
     Name {
         token: Token,
-        name: String, // TODO: Or use the copy in token
+        name: String,
     },
     Index {
         token: Token,
