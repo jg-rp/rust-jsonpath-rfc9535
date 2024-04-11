@@ -86,7 +86,7 @@ impl Parser {
                 kind: Name { value },
                 index,
             } => {
-                let name = unescape_string(value, &index)?;
+                let name = unescape_string(value, index)?;
                 let token = it.next().unwrap();
                 Ok(vec![Selector::Name { token, name }])
             }
@@ -125,7 +125,7 @@ impl Parser {
                     kind: DoubleQuoteString { value },
                     index,
                 } => {
-                    let name = unescape_string(value, &index)?;
+                    let name = unescape_string(value, index)?;
                     let token = it.next().unwrap();
                     selectors.push(Selector::Name { token, name });
                 }
@@ -189,7 +189,7 @@ impl Parser {
             }
         }
 
-        if selectors.len() == 0 {
+        if selectors.is_empty() {
             return Err(JSONPathError::new(
                 JSONPathErrorType::SyntaxError,
                 String::from("empty bracketed selection"),
@@ -279,7 +279,7 @@ impl Parser {
                     kind: Index { ref value },
                     ..
                 } => {
-                    if value.len() > 1 && (value.starts_with("0") || value.starts_with("-0")) {
+                    if value.len() > 1 && (value.starts_with('0') || value.starts_with("-0")) {
                         return Err(JSONPathError::syntax(
                             String::from("unexpected leading zero in index selector"),
                             token.index,
@@ -667,7 +667,7 @@ impl Parser {
 }
 
 fn validate_index(value: &Box<str>, token_index: usize) -> Result<(), JSONPathError> {
-    if value.len() > 1 && (value.starts_with("0") || value.starts_with("-0")) {
+    if value.len() > 1 && (value.starts_with('0') || value.starts_with("-0")) {
         Err(JSONPathError::syntax(
             format!("invalid index '{}'", value),
             token_index,
@@ -723,12 +723,10 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                             .iter()
                             .collect::<String>();
 
-                        let mut codepoint = u32::from_str_radix(&digits, 16).or_else(|_| {
-                            Err(JSONPathError::syntax(
+                        let mut codepoint = u32::from_str_radix(&digits, 16).map_err(|_| JSONPathError::syntax(
                                 String::from("invalid \\uXXXX escape"),
                                 start_index,
-                            ))
-                        })?;
+                            ))?;
 
                         if index + 5 < length && chars[index + 4] == '\\' && chars[index + 5] == 'u'
                         {
@@ -746,12 +744,10 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                                 .iter()
                                 .collect::<String>();
 
-                            let low_surrogate = u32::from_str_radix(&digits, 16).or_else(|_| {
-                                Err(JSONPathError::syntax(
+                            let low_surrogate = u32::from_str_radix(digits, 16).map_err(|_| JSONPathError::syntax(
                                     String::from("invalid \\uXXXX escape"),
                                     start_index,
-                                ))
-                            })?;
+                                ))?;
 
                             codepoint =
                                 0x10000 + (((codepoint & 0x03FF) << 10) | (low_surrogate & 0x03FF));

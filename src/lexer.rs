@@ -194,7 +194,7 @@ pub fn lex(query: &str) -> Result<Vec<Token>, JSONPathError> {
         }) => Err(JSONPathError {
             error: JSONPathErrorType::SyntaxError,
             msg: (*msg).to_string(),
-            index: index.clone(),
+            index: *index,
         }),
         _ => Ok(tokens),
     }
@@ -225,20 +225,18 @@ fn lex_segment(l: &mut Lexer) -> State {
     } else if l.accept('[') {
         l.emit(TokenType::LBracket);
         State::LexInsideBracketedSegment
+    } else if l.filter_depth > 0 {
+        State::LexInsideFilter
+    } else if l.peek() == EOQ {
+        l.next();
+        l.emit(TokenType::EOF);
+        State::EndOfQuery
     } else {
-        if l.filter_depth > 0 {
-            State::LexInsideFilter
-        } else if l.peek() == EOQ {
-            l.next();
-            l.emit(TokenType::EOF);
-            State::EndOfQuery
-        } else {
-            let msg = format!(
-                "expected '.', '..' or a bracketed selection, found '{}'",
-                l.peek()
-            );
-            l.error(msg)
-        }
+        let msg = format!(
+            "expected '.', '..' or a bracketed selection, found '{}'",
+            l.peek()
+        );
+        l.error(msg)
     }
 }
 
@@ -371,7 +369,7 @@ fn lex_inside_filter(l: &mut Lexer) -> State {
             l.emit(TokenType::Comma);
             // If we have unbalanced parens, we are inside a function call and a
             // comma separates arguments. Otherwise a comma separates selectors.
-            if l.paren_stack.len() > 0 {
+            if !l.paren_stack.is_empty() {
                 State::LexInsideFilter
             } else {
                 l.filter_depth -= 1;
@@ -397,7 +395,7 @@ fn lex_inside_filter(l: &mut Lexer) -> State {
             l.next();
             l.emit(TokenType::RParen);
             // Are we closing a function call or a parenthesized expression?
-            if l.paren_stack.len() > 0 {
+            if !l.paren_stack.is_empty() {
                 if *l.paren_stack.last().unwrap() == 1 {
                     l.paren_stack.pop();
                 } else {
@@ -658,40 +656,40 @@ fn lex_string(l: &mut Lexer, quote: char, next_state: State) -> State {
 fn is_name_first(ch: char) -> bool {
     let code_point = ch as u32;
     // surrogate pair code points are not representable with char
-    (code_point >= 0x41 && code_point <= 0x5A)
+    (0x41..=0x5A).contains(&code_point)
         || code_point == 0x5F
-        || (code_point >= 0x61 && code_point <= 0x7A)
+        || (0x61..=0x7A).contains(&code_point)
         || code_point >= 0x80
 }
 
 fn is_name_char(ch: char) -> bool {
     let code_point = ch as u32;
     // surrogate pair code points are not representable with char
-    (code_point >= 0x30 && code_point <= 0x39)
-        || (code_point >= 0x41 && code_point <= 0x5A)
+    (0x30..=0x39).contains(&code_point)
+        || (0x41..=0x5A).contains(&code_point)
         || code_point == 0x5F
-        || (code_point >= 0x61 && code_point <= 0x7A)
+        || (0x61..=0x7A).contains(&code_point)
         || code_point >= 0x80
 }
 
 fn is_digit(ch: char) -> bool {
     // 0-9
     let code_point = ch as u32;
-    code_point >= 0x30 && code_point <= 0x39
+    (0x30..=0x39).contains(&code_point)
 }
 
 fn is_function_name_first(ch: char) -> bool {
     // a-z
     let code_point = ch as u32;
-    code_point >= 0x61 && code_point <= 0x7a
+    (0x61..=0x7a).contains(&code_point)
 }
 
 fn is_function_name_char(ch: char) -> bool {
     // a-z 0-9 _
     let code_point = ch as u32;
-    (code_point >= 0x30 && code_point <= 0x39)
+    (0x30..=0x39).contains(&code_point)
         || code_point == 0x5F
-        || (code_point >= 0x61 && code_point <= 0x7a)
+        || (0x61..=0x7a).contains(&code_point)
 }
 
 #[cfg(test)]
