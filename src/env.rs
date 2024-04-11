@@ -18,7 +18,7 @@ pub struct Env {
 }
 
 impl Env {
-    pub fn default() -> Self {
+    pub fn standard() -> Self {
         let mut functions = HashMap::new();
 
         functions.insert(

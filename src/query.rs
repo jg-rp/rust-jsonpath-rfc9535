@@ -5,7 +5,7 @@ use crate::{env::Env, errors::JSONPathError, lexer::lex, parser::Parser, token::
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref PARSER: Parser = Parser::new(Env::default());
+    static ref PARSER: Parser = Parser::new(Env::standard());
 }
 
 #[derive(Debug)]

@@ -311,17 +311,15 @@ impl Parser {
             ..
         } = expr
         {
-            match self.env.functions.get(name) {
-                Some(FunctionSignature {
-                    return_type: ExpressionType::Value,
-                    ..
-                }) => {
-                    return Err(JSONPathError::typ(
-                        format!("result of {}() must be compared", name),
-                        expr.token.index,
-                    ));
-                }
-                _ => (),
+            if let Some(FunctionSignature {
+                return_type: ExpressionType::Value,
+                ..
+            }) = self.env.functions.get(name)
+            {
+                return Err(JSONPathError::typ(
+                    format!("result of {}() must be compared", name),
+                    expr.token.index,
+                ));
             }
         }
 
@@ -602,9 +600,7 @@ impl Parser {
                 Token { kind: Comma, .. } => {
                     it.next(); // eat comma
                 }
-                _ => {
-                    ();
-                }
+                _ => (),
             }
         }
 
@@ -666,7 +662,7 @@ impl Parser {
     }
 }
 
-fn validate_index(value: &Box<str>, token_index: usize) -> Result<(), JSONPathError> {
+fn validate_index(value: &str, token_index: usize) -> Result<(), JSONPathError> {
     if value.len() > 1 && (value.starts_with('0') || value.starts_with("-0")) {
         Err(JSONPathError::syntax(
             format!("invalid index '{}'", value),
@@ -723,10 +719,12 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                             .iter()
                             .collect::<String>();
 
-                        let mut codepoint = u32::from_str_radix(&digits, 16).map_err(|_| JSONPathError::syntax(
+                        let mut codepoint = u32::from_str_radix(&digits, 16).map_err(|_| {
+                            JSONPathError::syntax(
                                 String::from("invalid \\uXXXX escape"),
                                 start_index,
-                            ))?;
+                            )
+                        })?;
 
                         if index + 5 < length && chars[index + 4] == '\\' && chars[index + 5] == 'u'
                         {
@@ -744,10 +742,12 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                                 .iter()
                                 .collect::<String>();
 
-                            let low_surrogate = u32::from_str_radix(digits, 16).map_err(|_| JSONPathError::syntax(
+                            let low_surrogate = u32::from_str_radix(digits, 16).map_err(|_| {
+                                JSONPathError::syntax(
                                     String::from("invalid \\uXXXX escape"),
                                     start_index,
-                                ))?;
+                                )
+                            })?;
 
                             codepoint =
                                 0x10000 + (((codepoint & 0x03FF) << 10) | (low_surrogate & 0x03FF));

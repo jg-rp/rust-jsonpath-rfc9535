@@ -388,7 +388,9 @@ fn lex_inside_filter(l: &mut Lexer) -> State {
             l.next();
             l.emit(TokenType::LParen);
             // Are we in a function call? If so, a function argument contains parens.
-            l.paren_stack.last_mut().map(|i| *i += 1);
+            if let Some(i) = l.paren_stack.last_mut() {
+                *i += 1;
+            }
             State::LexInsideFilter
         }
         ')' => {
@@ -687,9 +689,7 @@ fn is_function_name_first(ch: char) -> bool {
 fn is_function_name_char(ch: char) -> bool {
     // a-z 0-9 _
     let code_point = ch as u32;
-    (0x30..=0x39).contains(&code_point)
-        || code_point == 0x5F
-        || (0x61..=0x7a).contains(&code_point)
+    (0x30..=0x39).contains(&code_point) || code_point == 0x5F || (0x61..=0x7a).contains(&code_point)
 }
 
 #[cfg(test)]

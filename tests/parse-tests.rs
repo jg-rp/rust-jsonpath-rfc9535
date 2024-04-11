@@ -3,7 +3,7 @@ use rust_jsonpath::{env::Env, errors::JSONPathError, lexer::lex, parser::Parser,
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref PARSER: Parser = Parser::new(Env::default());
+    static ref PARSER: Parser = Parser::new(Env::standard());
 }
 
 macro_rules! parse_tests {
