@@ -14,16 +14,36 @@ use TokenType::*;
 
 const EOF_TOKEN: Token = Token {
     kind: Eoq,
-    index: 0,
+    index: 0, // change to usize max?
 };
-
-type Tokens = Peekable<IntoIter<Token>>;
 
 const PRECEDENCE_LOWEST: u8 = 1;
 const PRECEDENCE_LOGICAL_OR: u8 = 3;
 const PRECEDENCE_LOGICAL_AND: u8 = 4;
 const PRECEDENCE_RELATIONAL: u8 = 5;
 const PRECEDENCE_LOGICAL_NOT: u8 = 7;
+
+struct TokenStream {
+    tokens: Peekable<IntoIter<Token>>,
+}
+
+impl TokenStream {
+    fn next(&mut self) -> Token {
+        if let Some(token) = self.tokens.next() {
+            token
+        } else {
+            EOF_TOKEN
+        }
+    }
+
+    fn peek(&mut self) -> &Token {
+        if let Some(token) = self.tokens.peek() {
+            token
+        } else {
+            &EOF_TOKEN
+        }
+    }
+}
 
 pub struct Parser {
     env: Env,
@@ -35,16 +55,17 @@ impl Parser {
     }
 
     pub fn parse(&self, tokens: Vec<Token>) -> Result<Vec<Segment>, JSONPathError> {
-        // TODO: try an iterator wrapper that keeps returning EOF when exhausted
-        let mut it = tokens.into_iter().peekable();
+        let mut it = TokenStream {
+            tokens: tokens.into_iter().peekable(),
+        };
 
-        match it.next().unwrap_or(EOF_TOKEN) {
+        match it.next() {
             Token { kind: Root, .. } => {
                 let segments = self.parse_segments(&mut it)?;
                 // parse_query should have consumed all tokens
                 match it.next() {
-                    Some(Token { kind: Eoq, .. }) | None => Ok(segments),
-                    Some(token) => Err(JSONPathError::syntax(
+                    Token { kind: Eoq, .. } => Ok(segments),
+                    token => Err(JSONPathError::syntax(
                         format!("expected end of query, found {}", token.kind),
                         token.index,
                     )),
@@ -57,17 +78,17 @@ impl Parser {
         }
     }
 
-    fn parse_segments(&self, it: &mut Tokens) -> Result<Vec<Segment>, JSONPathError> {
+    fn parse_segments(&self, it: &mut TokenStream) -> Result<Vec<Segment>, JSONPathError> {
         let mut segments: Vec<Segment> = Vec::new();
         loop {
-            match it.peek().unwrap_or(&EOF_TOKEN).kind {
+            match it.peek().kind {
                 DoubleDot => {
-                    let token = it.next().unwrap();
+                    let token = it.next();
                     let selectors = self.parse_selectors(it)?;
                     segments.push(Segment::Recursive { token, selectors });
                 }
                 LBracket | Name { .. } | Wild => {
-                    let token = (*it.peek().unwrap()).clone();
+                    let token = (*it.peek()).clone();
                     let selectors = self.parse_selectors(it)?;
                     segments.push(Segment::Child { token, selectors });
                 }
@@ -80,36 +101,34 @@ impl Parser {
         Ok(segments)
     }
 
-    fn parse_selectors(&self, it: &mut Tokens) -> Result<Vec<Selector>, JSONPathError> {
-        match it.peek().unwrap_or(&EOF_TOKEN) {
+    fn parse_selectors(&self, it: &mut TokenStream) -> Result<Vec<Selector>, JSONPathError> {
+        match it.peek() {
             Token {
                 kind: Name { value },
                 index,
             } => {
                 let name = unescape_string(value, index)?;
-                let token = it.next().unwrap();
+                let token = it.next();
                 Ok(vec![Selector::Name { token, name }])
             }
-            Token { kind: Wild, .. } => Ok(vec![Selector::Wild {
-                token: it.next().unwrap(),
-            }]),
+            Token { kind: Wild, .. } => Ok(vec![Selector::Wild { token: it.next() }]),
             Token { kind: LBracket, .. } => self.parse_bracketed(it),
             _ => Ok(Vec::new()),
         }
     }
 
-    fn parse_bracketed(&self, it: &mut Tokens) -> Result<Vec<Selector>, JSONPathError> {
+    fn parse_bracketed(&self, it: &mut TokenStream) -> Result<Vec<Selector>, JSONPathError> {
         #[cfg(debug_assertions)]
         debug_assert!(
-            matches!(it.peek(), Some(Token { kind: LBracket, .. })),
+            matches!(it.peek(), Token { kind: LBracket, .. }),
             "expected the start of a bracketed selection"
         );
 
-        let token = it.next().unwrap(); // LBracket
+        let token = it.next(); // LBracket
         let mut selectors: Vec<Selector> = Vec::new();
 
         loop {
-            match it.peek().unwrap_or(&EOF_TOKEN) {
+            match it.peek() {
                 Token { kind: RBracket, .. } => {
                     it.next();
                     break;
@@ -126,7 +145,7 @@ impl Parser {
                     index,
                 } => {
                     let name = unescape_string(value, index)?;
-                    let token = it.next().unwrap();
+                    let token = it.next();
                     selectors.push(Selector::Name { token, name });
                 }
                 Token {
@@ -134,11 +153,11 @@ impl Parser {
                     index,
                 } => {
                     let name = unescape_string(&value.replace("\\'", "'"), index)?;
-                    let token = it.next().unwrap();
+                    let token = it.next();
                     selectors.push(Selector::Name { token, name });
                 }
                 Token { kind: Wild, .. } => {
-                    let token = it.next().unwrap();
+                    let token = it.next();
                     selectors.push(Selector::Wild { token });
                 }
                 Token { kind: Filter, .. } => {
@@ -163,29 +182,28 @@ impl Parser {
             debug_assert!(
                 matches!(
                     it.peek(),
-                    Some(Token {
+                    Token {
                         kind: Comma | TokenType::RBracket,
                         ..
-                    })
+                    }
                 ),
                 "expected a comma or the end of a bracketed selection"
             );
 
             // expect a comma or closing bracket
             match it.peek() {
-                Some(Token { kind: RBracket, .. }) => continue,
-                Some(Token { kind: Comma, .. }) => {
+                Token { kind: RBracket, .. } => continue,
+                Token { kind: Comma, .. } => {
                     // eat comma
                     it.next();
                 }
-                Some(token) => {
+                token => {
                     return Err(JSONPathError::new(
                         JSONPathErrorType::SyntaxError,
                         format!("expected a comma or closing bracket, found {}", token.kind),
                         token.index,
                     ));
                 }
-                None => continue,
             }
         }
 
@@ -200,8 +218,8 @@ impl Parser {
         Ok(selectors)
     }
 
-    fn parse_slice_or_index(&self, it: &mut Tokens) -> Result<Selector, JSONPathError> {
-        let token = it.next().unwrap(); // index or colon
+    fn parse_slice_or_index(&self, it: &mut TokenStream) -> Result<Selector, JSONPathError> {
+        let token = it.next(); // index or colon
 
         #[cfg(debug_assertions)]
         debug_assert!(
@@ -215,7 +233,7 @@ impl Parser {
             "expected an index or slice"
         );
 
-        if token.kind == Colon || it.peek().unwrap_or(&EOF_TOKEN).kind == Colon {
+        if token.kind == Colon || it.peek().kind == Colon {
             // a slice
             let mut start: Option<isize> = None;
             let mut stop: Option<isize> = None;
@@ -235,28 +253,28 @@ impl Parser {
             }
 
             // 1 or 1: or : or ?
-            if matches!(it.peek().unwrap_or(&EOF_TOKEN).kind, Index { .. } | Colon) {
+            if matches!(it.peek().kind, Index { .. } | Colon) {
                 if let Token {
                     kind: Index { ref value },
                     index,
-                } = it.next().unwrap()
+                } = it.next()
                 {
                     validate_index(value, index)?;
                     stop = Some(value.parse::<isize>().map_err(|_| {
                         JSONPathError::syntax(String::from("invalid stop index"), index)
                     })?);
-                    if it.peek().unwrap_or(&EOF_TOKEN).kind == Colon {
+                    if it.peek().kind == Colon {
                         it.next(); // eat colon
                     }
                 }
             }
 
             // 1 or ?
-            if matches!(it.peek().unwrap_or(&EOF_TOKEN).kind, Index { .. }) {
+            if matches!(it.peek().kind, Index { .. }) {
                 if let Token {
                     kind: Index { ref value },
                     index,
-                } = it.next().unwrap()
+                } = it.next()
                 {
                     validate_index(value, index)?;
                     step =
@@ -296,14 +314,14 @@ impl Parser {
         }
     }
 
-    fn parse_filter(&self, it: &mut Tokens) -> Result<Selector, JSONPathError> {
+    fn parse_filter(&self, it: &mut TokenStream) -> Result<Selector, JSONPathError> {
         #[cfg(debug_assertions)]
         debug_assert!(
-            matches!(it.peek(), Some(Token { kind: Filter, .. })),
+            matches!(it.peek(), Token { kind: Filter, .. }),
             "expected a filter"
         );
 
-        let token = it.next().unwrap();
+        let token = it.next();
         let expr = self.parse_filter_expression(it, PRECEDENCE_LOWEST)?;
 
         if let FilterExpression {
@@ -336,8 +354,11 @@ impl Parser {
         })
     }
 
-    fn parse_not_expression(&self, it: &mut Tokens) -> Result<FilterExpression, JSONPathError> {
-        let token = it.next().unwrap();
+    fn parse_not_expression(
+        &self,
+        it: &mut TokenStream,
+    ) -> Result<FilterExpression, JSONPathError> {
+        let token = it.next();
         let expr = self.parse_filter_expression(it, PRECEDENCE_LOGICAL_NOT)?;
         Ok(FilterExpression::new(
             token,
@@ -349,10 +370,10 @@ impl Parser {
 
     fn parse_infix_expression(
         &self,
-        it: &mut Tokens,
+        it: &mut TokenStream,
         left: FilterExpression,
     ) -> Result<FilterExpression, JSONPathError> {
-        let token = it.next().unwrap();
+        let token = it.next();
         let precedence = self.precedence(&token.kind);
         let right = self.parse_filter_expression(it, precedence)?;
 
@@ -470,12 +491,15 @@ impl Parser {
         }
     }
 
-    fn parse_grouped_expression(&self, it: &mut Tokens) -> Result<FilterExpression, JSONPathError> {
+    fn parse_grouped_expression(
+        &self,
+        it: &mut TokenStream,
+    ) -> Result<FilterExpression, JSONPathError> {
         it.next(); // eat open paren
         let mut expr = self.parse_filter_expression(it, PRECEDENCE_LOWEST)?;
 
         loop {
-            match it.peek().unwrap_or(&EOF_TOKEN) {
+            match it.peek() {
                 Token {
                     kind: Eoq,
                     ref index,
@@ -492,7 +516,7 @@ impl Parser {
 
         #[cfg(debug_assertions)]
         debug_assert!(
-            matches!(it.peek(), Some(Token { kind: RParen, .. })),
+            matches!(it.peek(), Token { kind: RParen, .. }),
             "expected closing paren"
         );
 
@@ -500,21 +524,24 @@ impl Parser {
         Ok(expr)
     }
 
-    fn parse_basic_expression(&self, it: &mut Tokens) -> Result<FilterExpression, JSONPathError> {
-        match it.peek().unwrap_or(&EOF_TOKEN) {
+    fn parse_basic_expression(
+        &self,
+        it: &mut TokenStream,
+    ) -> Result<FilterExpression, JSONPathError> {
+        match it.peek() {
             Token {
                 kind: DoubleQuoteString { value },
                 index,
             } => {
                 let value = unescape_string(value, index)?;
-                let token = it.next().unwrap();
+                let token = it.next();
                 Ok(FilterExpression::new(
                     token,
                     FilterExpressionType::String { value },
                 ))
             }
             Token { kind: False, .. } => {
-                let token = it.next().unwrap();
+                let token = it.next();
                 Ok(FilterExpression::new(token, FilterExpressionType::False))
             }
             Token {
@@ -524,7 +551,7 @@ impl Parser {
                 let f = value.parse::<f64>().map_err(|_| {
                     JSONPathError::syntax(String::from("invalid float literal"), *index)
                 })?;
-                let token = it.next().unwrap();
+                let token = it.next();
                 Ok(FilterExpression::new(
                     token,
                     FilterExpressionType::Float { value: f },
@@ -542,18 +569,18 @@ impl Parser {
                 let i = value.parse::<f64>().map_err(|_| {
                     JSONPathError::syntax(String::from("invalid float literal"), *index)
                 })? as i64;
-                let token = it.next().unwrap();
+                let token = it.next();
                 Ok(FilterExpression::new(
                     token,
                     FilterExpressionType::Int { value: i },
                 ))
             }
             Token { kind: Null, .. } => {
-                let token = it.next().unwrap();
+                let token = it.next();
                 Ok(FilterExpression::new(token, FilterExpressionType::Null))
             }
             Token { kind: Root, .. } => {
-                let token = it.next().unwrap();
+                let token = it.next();
                 let segments = self.parse_segments(it)?;
                 Ok(FilterExpression::new(
                     token,
@@ -563,7 +590,7 @@ impl Parser {
                 ))
             }
             Token { kind: Current, .. } => {
-                let token = it.next().unwrap();
+                let token = it.next();
                 let segments = self.parse_segments(it)?;
                 Ok(FilterExpression::new(
                     token,
@@ -577,14 +604,14 @@ impl Parser {
                 index,
             } => {
                 let value = unescape_string(&value.replace("\\'", "'"), index)?;
-                let token = it.next().unwrap();
+                let token = it.next();
                 Ok(FilterExpression::new(
                     token,
                     FilterExpressionType::String { value },
                 ))
             }
             Token { kind: True, .. } => {
-                let token = it.next().unwrap();
+                let token = it.next();
                 Ok(FilterExpression::new(token, FilterExpressionType::True))
             }
             Token { kind: LParen, .. } => self.parse_grouped_expression(it),
@@ -596,23 +623,20 @@ impl Parser {
         }
     }
 
-    fn parse_function_call(&self, it: &mut Tokens) -> Result<FilterExpression, JSONPathError> {
-        let token = it.next().unwrap();
+    fn parse_function_call(&self, it: &mut TokenStream) -> Result<FilterExpression, JSONPathError> {
+        let token = it.next();
         let mut arguments: Vec<FilterExpression> = Vec::new();
 
-        while it.peek().unwrap_or(&EOF_TOKEN).kind != RParen {
+        while it.peek().kind != RParen {
             let mut expr = self.parse_basic_expression(it)?;
 
-            while matches!(
-                it.peek().unwrap_or(&EOF_TOKEN).kind,
-                Eq | Ge | Gt | Le | Lt | Ne | And | Or
-            ) {
+            while matches!(it.peek().kind, Eq | Ge | Gt | Le | Lt | Ne | And | Or) {
                 expr = self.parse_infix_expression(it, expr)?
             }
 
             arguments.push(expr);
 
-            match it.peek().unwrap_or(&EOF_TOKEN) {
+            match it.peek() {
                 Token { kind: RParen, .. } => {
                     break;
                 }
@@ -625,7 +649,7 @@ impl Parser {
 
         #[cfg(debug_assertions)]
         debug_assert!(
-            matches!(it.peek(), Some(Token { kind: RParen, .. })),
+            matches!(it.peek(), Token { kind: RParen, .. }),
             "expected closing paren"
         );
 
@@ -651,13 +675,13 @@ impl Parser {
 
     fn parse_filter_expression(
         &self,
-        it: &mut Tokens,
+        it: &mut TokenStream,
         precedence: u8,
     ) -> Result<FilterExpression, JSONPathError> {
         let mut left = self.parse_basic_expression(it)?;
 
         loop {
-            let peek_kind = &it.peek().unwrap_or(&EOF_TOKEN).kind;
+            let peek_kind = &it.peek().kind;
             if matches!(peek_kind, Eoq | RBracket)
                 || self.precedence(peek_kind) < precedence
                 || !matches!(peek_kind, Eq | Ge | Gt | Le | Lt | Ne | And | Or)
