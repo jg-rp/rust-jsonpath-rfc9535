@@ -59,7 +59,7 @@ impl Env {
 
         Env {
             max_index: 2_i64.pow(53) - 1,
-            min_index: -2_i64.pow(53) + 1,
+            min_index: (-2_i64).pow(53) + 1,
             functions,
         }
     }

@@ -3,7 +3,10 @@ use std::{iter::Peekable, vec::IntoIter};
 use crate::{
     env::{Env, ExpressionType, FunctionSignature},
     errors::{JSONPathError, JSONPathErrorType},
-    query::{ComparisonOperator, FilterExpression, LogicalOperator, Query, Segment, Selector},
+    query::{
+        ComparisonOperator, FilterExpression, FilterExpressionType, LogicalOperator, Query,
+        Segment, Selector,
+    },
     token::{Token, TokenType},
 };
 
@@ -303,7 +306,11 @@ impl Parser {
         let token = it.next().unwrap();
         let expr = self.parse_filter_expression(it, PRECEDENCE_LOWEST)?;
 
-        if let FilterExpression::Function { ref name, .. } = expr {
+        if let FilterExpression {
+            kind: FilterExpressionType::Function { ref name, .. },
+            ..
+        } = expr
+        {
             match self.env.functions.get(name) {
                 Some(FunctionSignature {
                     return_type: ExpressionType::Value,
@@ -311,25 +318,17 @@ impl Parser {
                 }) => {
                     return Err(JSONPathError::typ(
                         format!("result of {}() must be compared", name),
-                        token.index, // TODO: expr.token.index
+                        expr.token.index,
                     ));
                 }
                 _ => (),
             }
         }
 
-        if matches!(
-            expr,
-            FilterExpression::True
-                | FilterExpression::False
-                | FilterExpression::Null
-                | FilterExpression::String { .. }
-                | FilterExpression::Int { .. }
-                | FilterExpression::Float { .. }
-        ) {
+        if expr.is_literal() {
             return Err(JSONPathError::typ(
                 String::from("filter expression literals must be compared"),
-                token.index, // TODO: expr.token.index
+                expr.token.index,
             ));
         }
 
@@ -340,11 +339,14 @@ impl Parser {
     }
 
     fn parse_not_expression(&self, it: &mut Tokens) -> Result<FilterExpression, JSONPathError> {
-        it.next();
+        let token = it.next().unwrap();
         let expr = self.parse_filter_expression(it, PRECEDENCE_LOGICAL_NOT)?;
-        Ok(FilterExpression::Not {
-            expression: Box::new(expr),
-        })
+        Ok(FilterExpression::new(
+            token,
+            FilterExpressionType::Not {
+                expression: Box::new(expr),
+            },
+        ))
     }
 
     fn parse_infix_expression(
@@ -359,67 +361,91 @@ impl Parser {
         match token.kind {
             And => {
                 // TODO: error if left or right is an expression literal
-                Ok(FilterExpression::Logical {
-                    left: Box::new(left),
-                    operator: LogicalOperator::And,
-                    right: Box::new(right),
-                })
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::Logical {
+                        left: Box::new(left),
+                        operator: LogicalOperator::And,
+                        right: Box::new(right),
+                    },
+                ))
             }
             Or => {
                 // TODO: error if left or right is an expression literal
-                Ok(FilterExpression::Logical {
-                    left: Box::new(left),
-                    operator: LogicalOperator::Or,
-                    right: Box::new(right),
-                })
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::Logical {
+                        left: Box::new(left),
+                        operator: LogicalOperator::Or,
+                        right: Box::new(right),
+                    },
+                ))
             }
             Eq => {
                 // TODO: error if non comparable
-                Ok(FilterExpression::Comparison {
-                    left: Box::new(left),
-                    operator: ComparisonOperator::Eq,
-                    right: Box::new(right),
-                })
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::Comparison {
+                        left: Box::new(left),
+                        operator: ComparisonOperator::Eq,
+                        right: Box::new(right),
+                    },
+                ))
             }
             Ge => {
                 // TODO: error if non comparable
-                Ok(FilterExpression::Comparison {
-                    left: Box::new(left),
-                    operator: ComparisonOperator::Ge,
-                    right: Box::new(right),
-                })
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::Comparison {
+                        left: Box::new(left),
+                        operator: ComparisonOperator::Ge,
+                        right: Box::new(right),
+                    },
+                ))
             }
             Gt => {
                 // TODO: error if non comparable
-                Ok(FilterExpression::Comparison {
-                    left: Box::new(left),
-                    operator: ComparisonOperator::Gt,
-                    right: Box::new(right),
-                })
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::Comparison {
+                        left: Box::new(left),
+                        operator: ComparisonOperator::Gt,
+                        right: Box::new(right),
+                    },
+                ))
             }
             Le => {
                 // TODO: error if non comparable
-                Ok(FilterExpression::Comparison {
-                    left: Box::new(left),
-                    operator: ComparisonOperator::Le,
-                    right: Box::new(right),
-                })
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::Comparison {
+                        left: Box::new(left),
+                        operator: ComparisonOperator::Le,
+                        right: Box::new(right),
+                    },
+                ))
             }
             Lt => {
                 // TODO: error if non comparable
-                Ok(FilterExpression::Comparison {
-                    left: Box::new(left),
-                    operator: ComparisonOperator::Lt,
-                    right: Box::new(right),
-                })
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::Comparison {
+                        left: Box::new(left),
+                        operator: ComparisonOperator::Lt,
+                        right: Box::new(right),
+                    },
+                ))
             }
             Ne => {
                 // TODO: error if non comparable
-                Ok(FilterExpression::Comparison {
-                    left: Box::new(left),
-                    operator: ComparisonOperator::Ne,
-                    right: Box::new(right),
-                })
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::Comparison {
+                        left: Box::new(left),
+                        operator: ComparisonOperator::Ne,
+                        right: Box::new(right),
+                    },
+                ))
             }
             _ => Err(JSONPathError::syntax(
                 format!("unexpected infix operator {}", token.kind),
@@ -465,12 +491,15 @@ impl Parser {
                 index,
             } => {
                 let value = unescape_string(value, index)?;
-                it.next();
-                Ok(FilterExpression::String { value })
+                let token = it.next().unwrap();
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::String { value },
+                ))
             }
             Token { kind: False, .. } => {
-                it.next();
-                Ok(FilterExpression::False)
+                let token = it.next().unwrap();
+                Ok(FilterExpression::new(token, FilterExpressionType::False))
             }
             Token {
                 kind: Float { ref value },
@@ -479,8 +508,11 @@ impl Parser {
                 let f = value.parse::<f64>().map_err(|_| {
                     JSONPathError::syntax(String::from("invalid float literal"), *index)
                 })?;
-                it.next();
-                Ok(FilterExpression::Float { value: f })
+                let token = it.next().unwrap();
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::Float { value: f },
+                ))
             }
             Token {
                 kind: Function { .. },
@@ -493,38 +525,50 @@ impl Parser {
                 let i = value.parse::<f64>().map_err(|_| {
                     JSONPathError::syntax(String::from("invalid float literal"), *index)
                 })? as i64;
-                it.next();
-                Ok(FilterExpression::Int { value: i })
+                let token = it.next().unwrap();
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::Int { value: i },
+                ))
             }
             Token { kind: Null, .. } => {
-                it.next();
-                Ok(FilterExpression::Null)
+                let token = it.next().unwrap();
+                Ok(FilterExpression::new(token, FilterExpressionType::Null))
             }
             Token { kind: Root, .. } => {
-                it.next();
+                let token = it.next().unwrap();
                 let segments = self.parse_segments(it)?;
-                Ok(FilterExpression::RootQuery {
-                    query: Box::new(Query { segments }),
-                })
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::RootQuery {
+                        query: Box::new(Query { segments }),
+                    },
+                ))
             }
             Token { kind: Current, .. } => {
-                it.next();
+                let token = it.next().unwrap();
                 let segments = self.parse_segments(it)?;
-                Ok(FilterExpression::RelativeQuery {
-                    query: Box::new(Query { segments }),
-                })
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::RelativeQuery {
+                        query: Box::new(Query { segments }),
+                    },
+                ))
             }
             Token {
                 kind: SingleQuoteString { value },
                 index,
             } => {
                 let value = unescape_string(&value.replace("\\'", "'"), index)?;
-                it.next();
-                Ok(FilterExpression::String { value })
+                let token = it.next().unwrap();
+                Ok(FilterExpression::new(
+                    token,
+                    FilterExpressionType::String { value },
+                ))
             }
             Token { kind: True, .. } => {
-                it.next();
-                Ok(FilterExpression::True)
+                let token = it.next().unwrap();
+                Ok(FilterExpression::new(token, FilterExpressionType::True))
             }
             Token { kind: LParen, .. } => self.parse_grouped_expression(it),
             Token { kind: Not, .. } => self.parse_not_expression(it),
@@ -572,15 +616,15 @@ impl Parser {
 
         it.next(); // eat closing paren
 
-        if let Token {
-            kind: Function { name },
-            ..
-        } = token
-        {
-            Ok(FilterExpression::Function {
-                name: name.to_string(),
-                args: arguments,
-            })
+        if let Function { ref name } = &token.kind {
+            let function_name = name.to_string();
+            Ok(FilterExpression::new(
+                token,
+                FilterExpressionType::Function {
+                    name: function_name,
+                    args: arguments,
+                },
+            ))
         } else {
             Err(JSONPathError::syntax(
                 format!("unexpected function argument token {}", token.kind),
