@@ -538,6 +538,7 @@ impl Parser {
                 kind: Int { value },
                 index,
             } => {
+                // TODO: error if out of range [-(2**53)+1, (2**53)-1]
                 let i = value.parse::<f64>().map_err(|_| {
                     JSONPathError::syntax(String::from("invalid float literal"), *index)
                 })? as i64;

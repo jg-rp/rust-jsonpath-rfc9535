@@ -2,7 +2,7 @@ use rust_jsonpath::{errors::JSONPathError, query::Query};
 
 macro_rules! assert_valid {
     ($($name:ident: $value:expr,)*) => {
-    mod cts {
+    mod cts_valid {
         use super::*;
         $(
             #[allow(non_snake_case)]
@@ -11,6 +11,23 @@ macro_rules! assert_valid {
                 let input = $value;
                 Query::new(input)?;
                 Ok(())
+            }
+        )*
+        }
+    }
+}
+
+macro_rules! assert_invalid {
+    ($($name:ident: $value:expr,)*) => {
+    mod cts_invalid {
+        use super::*;
+        $(
+            #[allow(non_snake_case)]
+            #[test]
+            #[should_panic]
+            fn $name() {
+                let input = $value;
+                Query::new(input).unwrap();
             }
         )*
         }
@@ -400,7 +417,101 @@ assert_valid! {
     whitespace__slice__return_between_colon_and_step0: "$[1:5:\r2]",
 }
 
-// TODO: assert invalid macro
+assert_invalid! {
+    basic__no_leading_whitespace0: " $",
+    basic__no_trailing_whitespace0: "$ ",
+    basic__name_shorthand__symbol0: "$.&",
+    basic__name_shorthand__number0: "$.1",
+    basic__multiple_selectors__space_instead_of_comma0: "$[0 2]",
+    basic__empty_segment0: "$[]",
+    basic__bald_descendant_segment0: "$..",
+    filter__non_singular_query_in_comparison__slice0: "$[?@[0:0]==0]",
+    filter__non_singular_query_in_comparison__all_children0: "$[?@[*]==0]",
+    filter__non_singular_query_in_comparison__descendants0: "$[?@..a==0]",
+    filter__non_singular_query_in_comparison__combined0: "$[?@.a[*].a==0]",
+    filter__relative_non_singular_query__index__equal0: "$[?(@[0, 0]==42)]",
+    filter__relative_non_singular_query__index__not_equal0: "$[?(@[0, 0]!=42)]",
+    filter__relative_non_singular_query__index__less_or_equal0: "$[?(@[0, 0]<=42)]",
+    filter__relative_non_singular_query__name__equal0: "$[?(@['a', 'a']==42)]",
+    filter__relative_non_singular_query__name__not_equal0: "$[?(@['a', 'a']!=42)]",
+    filter__relative_non_singular_query__name__less_or_equal0: "$[?(@['a', 'a']<=42)]",
+    filter__relative_non_singular_query__combined__equal0: "$[?(@[0, '0']==42)]",
+    filter__relative_non_singular_query__combined__not_equal0: "$[?(@[0, '0']!=42)]",
+    filter__relative_non_singular_query__combined__less_or_equal0: "$[?(@[0, '0']<=42)]",
+    filter__relative_non_singular_query__wildcard__equal0: "$[?(@.*==42)]",
+    filter__relative_non_singular_query__wildcard__not_equal0: "$[?(@.*!=42)]",
+    filter__relative_non_singular_query__wildcard__less_or_equal0: "$[?(@.*<=42)]",
+    filter__relative_non_singular_query__slice__equal0: "$[?(@[0:0]==42)]",
+    filter__relative_non_singular_query__slice__not_equal0: "$[?(@[0:0]!=42)]",
+    filter__relative_non_singular_query__slice__less_or_equal0: "$[?(@[0:0]<=42)]",
+    filter__absolute_non_singular_query__index__equal0: "$[?($[0, 0]==42)]",
+    filter__absolute_non_singular_query__index__not_equal0: "$[?($[0, 0]!=42)]",
+    filter__absolute_non_singular_query__index__less_or_equal0: "$[?($[0, 0]<=42)]",
+    filter__absolute_non_singular_query__name__equal0: "$[?($['a', 'a']==42)]",
+    filter__absolute_non_singular_query__name__not_equal0: "$[?($['a', 'a']!=42)]",
+    filter__absolute_non_singular_query__name__less_or_equal0: "$[?($['a', 'a']<=42)]",
+    filter__absolute_non_singular_query__combined__equal0: "$[?($[0, '0']==42)]",
+    filter__absolute_non_singular_query__combined__not_equal0: "$[?($[0, '0']!=42)]",
+    filter__absolute_non_singular_query__combined__less_or_equal0: "$[?($[0, '0']<=42)]",
+    filter__absolute_non_singular_query__wildcard__equal0: "$[?($.*==42)]",
+    filter__absolute_non_singular_query__wildcard__not_equal0: "$[?($.*!=42)]",
+    filter__absolute_non_singular_query__wildcard__less_or_equal0: "$[?($.*<=42)]",
+    filter__absolute_non_singular_query__slice__equal0: "$[?($[0:0]==42)]",
+    filter__absolute_non_singular_query__slice__not_equal0: "$[?($[0:0]!=42)]",
+    filter__absolute_non_singular_query__slice__less_or_equal0: "$[?($[0:0]<=42)]",
+    filter__equals_number__decimal_fraction__no_fractional_digit0: "$[?@.a==1.]",
+    index_selector__overflowing_index0: "$[231584178474632390847141970017375815706539969331281128078915168015826259279872]",
+    index_selector__not_actually_an_index__overflowing_index_leads_into_general_text0: "$[231584178474632390847141970017375815706539969331281128078915168SomeRandomText]",
+    index_selector__leading_00: "$[01]",
+    index_selector__leading__00: "$[-01]",
+    name_selector__double_quotes__invalid_escaped_single_quote0: "$[\"\\'\"]",
+    name_selector__double_quotes__embedded_double_quote0: "$[\"\"\"]",
+    name_selector__double_quotes__incomplete_escape0: "$[\"\\\"]",
+    name_selector__single_quotes__invalid_escaped_double_quote0: "$['\\\"']",
+    name_selector__single_quotes__embedded_single_quote0: "$[''']",
+    name_selector__single_quotes__incomplete_escape0: "$['\\']",
+    slice_selector__too_many_colons0: "$[1:2:3:4]",
+    slice_selector__non_integer_array_index0: "$[1:2:a]",
+    slice_selector__overflowing_to_value0: "$[2:231584178474632390847141970017375815706539969331281128078915168015826259279872]",
+    slice_selector__underflowing_from_value0: "$[-231584178474632390847141970017375815706539969331281128078915168015826259279872:1]",
+    slice_selector__overflowing_from_value_with_negative_step0: "$[231584178474632390847141970017375815706539969331281128078915168015826259279872:0:-1]",
+    slice_selector__underflowing_to_value_with_negative_step0: "$[3:-231584178474632390847141970017375815706539969331281128078915168015826259279872:-1]",
+    slice_selector__overflowing_step0: "$[1:10:231584178474632390847141970017375815706539969331281128078915168015826259279872]",
+    slice_selector__underflowing_step0: "$[-1:-10:-231584178474632390847141970017375815706539969331281128078915168015826259279872]",
+    functions__count__non_query_arg__number0: "$[?count(1)>2]",
+    functions__count__non_query_arg__string0: "$[?count('string')>2]",
+    functions__count__non_query_arg__true0: "$[?count(true)>2]",
+    functions__count__non_query_arg__false0: "$[?count(false)>2]",
+    functions__count__non_query_arg__null0: "$[?count(null)>2]",
+    functions__count__result_must_be_compared0: "$[?count(@..*)]",
+    functions__count__no_params0: "$[?count()==1]",
+    functions__count__too_many_params0: "$[?count(@.a,@.b)==1]",
+    functions__length__result_must_be_compared0: "$[?length(@.a)]",
+    functions__length__no_params0: "$[?length()==1]",
+    functions__length__too_many_params0: "$[?length(@.a,@.b)==1]",
+    functions__length__non_singular_query_arg0: "$[?length(@.*)<3]",
+    functions__match__result_cannot_be_compared0: "$[?match(@.a, 'a.*')==true]",
+    functions__match__too_few_params0: "$[?match(@.a)==1]",
+    functions__match__too_many_params0: "$[?match(@.a,@.b,@.c)==1]",
+    functions__search__result_cannot_be_compared0: "$[?search(@.a, 'a.*')==true]",
+    functions__search__too_few_params0: "$[?search(@.a)]",
+    functions__search__too_many_params0: "$[?search(@.a,@.b,@.c)]",
+    functions__value__too_few_params0: "$[?value()==4]",
+    functions__value__too_many_params0: "$[?value(@.a,@.b)==4]",
+    functions__value__result_must_be_compared0: "$[?value(@.a)]",
+    whitespace__functions__space_between_function_name_and_parenthesis0: "$[?count (@.*)==1]",
+    whitespace__functions__newline_between_function_name_and_parenthesis0: "$[?count\n(@.*)==1]",
+    whitespace__functions__tab_between_function_name_and_parenthesis0: "$[?count\t(@.*)==1]",
+    whitespace__functions__return_between_function_name_and_parenthesis0: "$[?count\r(@.*)==1]",
+    whitespace__selectors__space_between_dot_and_name0: "$. a",
+    whitespace__selectors__newline_between_dot_and_name0: "$.\na",
+    whitespace__selectors__tab_between_dot_and_name0: "$.\ta",
+    whitespace__selectors__return_between_dot_and_name0: "$.\ra",
+    whitespace__selectors__space_between_recursive_descent_and_name0: "$.. a",
+    whitespace__selectors__newline_between_recursive_descent_and_name0: "$..\na",
+    whitespace__selectors__tab_between_recursive_descent_and_name0: "$..\ta",
+    whitespace__selectors__return_between_recursive_descent_and_name0: "$..\ra",
+}
 
 #[test]
 #[should_panic]

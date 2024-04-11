@@ -57,11 +57,12 @@ def main(path: str) -> None:
         f"{snake_name(t.name)}: {encode_selector(t.selector)}"
         for t in test_cases
         if t.invalid_selector
+        and "embedded U+" not in t.name  # exclude tricky escapes for now
     ]
 
     print(f"assert_valid! {{\n    {',\n    '.join(valid_cases)},\n}}")
-    # print("\n")
-    # print(f"assert_invalid! {{\n    {',\n    '.join(invalid_cases)},\n}}")
+    print("\n")
+    print(f"assert_invalid! {{\n    {',\n    '.join(invalid_cases)},\n}}")
 
 
 if __name__ == "__main__":
