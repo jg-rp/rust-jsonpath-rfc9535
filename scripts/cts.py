@@ -1,6 +1,8 @@
 import json
 import re
 import sys
+from operator import itemgetter
+from itertools import filterfalse
 from typing import NamedTuple
 from typing import Optional
 
@@ -25,9 +27,7 @@ def snake_name(name: str) -> str:
     name = re.sub(r"[^a-zA-Z0-9_]", "_", name).encode("ascii", errors="ignore").decode()
     cnt = names.get(name, 0)
     names[name] = cnt + 1
-
-    name += str(cnt)
-    return name
+    return f"{name}_{cnt}"
 
 
 def encode_selector(selector: str) -> str:
@@ -36,6 +36,30 @@ def encode_selector(selector: str) -> str:
         return f'"{selector}"'
     # return RE_ESCAPE.sub(handle_sub, json.dumps(selector))
     return json.dumps(selector)
+
+
+def unique_everseen(iterable, key=None):
+    """List unique elements, preserving order. Remember all elements ever seen.
+
+    From https://docs.python.org/3/library/itertools.html
+    """
+    # unique_everseen('AAAABBBCCDAABBB') → A B C D
+    # unique_everseen('ABBcCAD', str.casefold) → A B c D
+    seen = set()
+    if key is None:
+        for element in filterfalse(seen.__contains__, iterable):
+            seen.add(element)
+            yield element
+    else:
+        for element in iterable:
+            k = key(element)
+            if k not in seen:
+                seen.add(k)
+                yield element
+
+
+def dedupe(cases: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    return list(unique_everseen(cases, key=itemgetter(1)))
 
 
 def main(path: str) -> None:
@@ -47,24 +71,30 @@ def main(path: str) -> None:
         for t in data["tests"]
     ]
 
-    # TODO: dedupe on selector (some test cases just differ in their data)
+    valid_cases = dedupe(
+        [
+            (snake_name(t.name), encode_selector(t.selector))
+            for t in test_cases
+            if not t.invalid_selector
+        ]
+    )
 
-    valid_cases = [
-        f"{snake_name(t.name)}: {encode_selector(t.selector)}"
-        for t in test_cases
-        if not t.invalid_selector
-    ]
+    valid_cases_str = [f"{name}: {query}" for name, query in valid_cases]
 
-    invalid_cases = [
-        f"{snake_name(t.name)}: {encode_selector(t.selector)}"
-        for t in test_cases
-        if t.invalid_selector
-        and "embedded U+" not in t.name  # exclude tricky escapes for now
-    ]
+    invalid_cases = dedupe(
+        [
+            (snake_name(t.name), encode_selector(t.selector))
+            for t in test_cases
+            if t.invalid_selector
+            and "embedded U+" not in t.name  # exclude tricky escapes for now
+        ]
+    )
 
-    print(f"assert_valid! {{\n    {',\n    '.join(valid_cases)},\n}}")
+    invalid_cases_str = [f"{name}: {query}" for name, query in invalid_cases]
+
+    print(f"assert_valid! {{\n    {',\n    '.join(valid_cases_str)},\n}}")
     print("\n")
-    print(f"assert_invalid! {{\n    {',\n    '.join(invalid_cases)},\n}}")
+    print(f"assert_invalid! {{\n    {',\n    '.join(invalid_cases_str)},\n}}")
 
 
 if __name__ == "__main__":
