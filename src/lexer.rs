@@ -4,14 +4,7 @@ use crate::{
     token::{Token, TokenType, EOQ},
 };
 
-use lazy_static::lazy_static;
-use std::{collections::HashSet, str::CharIndices};
-
-lazy_static! {
-    static ref ESCAPE_CHARS: HashSet<char> =
-        HashSet::from(['b', 'f', 'n', 'r', 't', 'u', '/', '\\']);
-    static ref WHITESPACE_CHARS: HashSet<char> = HashSet::from([' ', '\n', '\r', '\t']);
-}
+use std::str::CharIndices;
 
 enum State {
     Error,
@@ -158,7 +151,7 @@ impl<'q> Lexer<'q> {
             "must emit or ignore before eating whitespace"
         );
 
-        if self.accept_run(|ch| WHITESPACE_CHARS.contains(&ch)) {
+        if self.accept_run(is_whitespace_char) {
             self.ignore();
             true
         } else {
@@ -518,7 +511,7 @@ fn lex_string(l: &mut Lexer, quote: char, next_state: State) -> State {
         match l.peek() {
             '\\' => {
                 l.next();
-                if !l.accept_if(|c| ESCAPE_CHARS.contains(&c) || c == quote) {
+                if !l.accept_if(|c| is_escape_char(c) || c == quote) {
                     return l.error(String::from("invalid escape sequence"));
                 }
             }
@@ -637,6 +630,14 @@ fn is_function_name_char(ch: char) -> bool {
     // a-z 0-9 _
     let code_point = ch as u32;
     (0x30..=0x39).contains(&code_point) || code_point == 0x5F || (0x61..=0x7a).contains(&code_point)
+}
+
+fn is_escape_char(ch: char) -> bool {
+    matches!(ch, 'b' | 'f' | 'n' | 'r' | 't' | 'u' | '/' | '\\')
+}
+
+fn is_whitespace_char(ch: char) -> bool {
+    matches!(ch, ' ' | '\n' | '\r' | '\t')
 }
 
 #[cfg(test)]

@@ -17,6 +17,9 @@ macro_rules! parse_tests {
     }
 }
 
+// TODO: test str repr of filter function call
+// TODO: < and <= expr
+
 parse_tests! {
     just_root: ("$", "$"),
     shorthand_name: ("$.foo", "$['foo']"),

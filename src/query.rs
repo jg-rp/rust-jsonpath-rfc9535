@@ -208,7 +208,7 @@ pub enum FilterExpressionType {
         value: f64,
     },
     Boolean {
-        expression: Box<FilterExpression>,
+        expression: Box<FilterExpression>, // TODO: drop Boolean expression?
     },
     Not {
         expression: Box<FilterExpression>,

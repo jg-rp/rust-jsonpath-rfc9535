@@ -46,7 +46,7 @@ impl TokenStream {
 }
 
 pub struct Parser {
-    env: Env,
+    pub env: Env,
 }
 
 impl Parser {
@@ -350,7 +350,7 @@ impl Parser {
 
         Ok(Selector::Filter {
             token,
-            expression: Box::new(expr),
+            expression: Box::new(expr), // TODO: wrap expr in FilterExpression::Boolean?
         })
     }
 
@@ -567,7 +567,7 @@ impl Parser {
             } => {
                 // TODO: error if out of range [-(2**53)+1, (2**53)-1]
                 let i = value.parse::<f64>().map_err(|_| {
-                    JSONPathError::syntax(String::from("invalid float literal"), *index)
+                    JSONPathError::syntax(String::from("invalid integer literal"), *index)
                 })? as i64;
                 let token = it.next();
                 Ok(FilterExpression::new(
@@ -699,7 +699,7 @@ impl Parser {
         match kind {
             And => PRECEDENCE_LOGICAL_AND,
             Eq | Ge | Gt | Le | Lt | Ne => PRECEDENCE_RELATIONAL,
-            Not => PRECEDENCE_LOGICAL_OR,
+            Not => PRECEDENCE_LOGICAL_NOT,
             Or => PRECEDENCE_LOGICAL_OR,
             _ => PRECEDENCE_LOWEST,
         }
