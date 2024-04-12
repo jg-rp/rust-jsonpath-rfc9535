@@ -112,13 +112,13 @@ pub enum Selector {
     },
     Index {
         token: Token,
-        index: isize,
+        index: i64,
     },
     Slice {
         token: Token,
-        start: Option<isize>,
-        stop: Option<isize>,
-        step: Option<isize>,
+        start: Option<i64>,
+        stop: Option<i64>,
+        step: Option<i64>,
     },
     Wild {
         token: Token,

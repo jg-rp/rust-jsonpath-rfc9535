@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::RangeInclusive};
 
 pub enum ExpressionType {
     Logical,
@@ -12,8 +12,7 @@ pub struct FunctionSignature {
 }
 
 pub struct Env {
-    pub max_index: i64,
-    pub min_index: i64,
+    pub index_range: RangeInclusive<i64>,
     pub functions: HashMap<String, FunctionSignature>,
 }
 
@@ -58,8 +57,7 @@ impl Env {
         );
 
         Env {
-            max_index: 2_i64.pow(53) - 1,
-            min_index: (-2_i64).pow(53) + 1,
+            index_range: ((-2_i64).pow(53) + 1..=2_i64.pow(53) - 1),
             functions,
         }
     }

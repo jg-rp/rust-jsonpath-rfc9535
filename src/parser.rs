@@ -235,9 +235,9 @@ impl Parser {
 
         if token.kind == Colon || it.peek().kind == Colon {
             // a slice
-            let mut start: Option<isize> = None;
-            let mut stop: Option<isize> = None;
-            let mut step: Option<isize> = None;
+            let mut start: Option<i64> = None;
+            let mut stop: Option<i64> = None;
+            let mut step: Option<i64> = None;
 
             // 1: or :
             if let Token {
@@ -245,10 +245,7 @@ impl Parser {
                 index,
             } = &token
             {
-                validate_index(value, *index)?;
-                start = Some(value.parse::<isize>().map_err(|_| {
-                    JSONPathError::syntax(String::from("invalid start index"), *index)
-                })?);
+                start = Some(self.parse_i_json_int(value, *index)?);
                 it.next(); // eat colon
             }
 
@@ -259,10 +256,7 @@ impl Parser {
                     index,
                 } = it.next()
                 {
-                    validate_index(value, index)?;
-                    stop = Some(value.parse::<isize>().map_err(|_| {
-                        JSONPathError::syntax(String::from("invalid stop index"), index)
-                    })?);
+                    stop = Some(self.parse_i_json_int(value, index)?);
                     if it.peek().kind == Colon {
                         it.next(); // eat colon
                     }
@@ -276,11 +270,7 @@ impl Parser {
                     index,
                 } = it.next()
                 {
-                    validate_index(value, index)?;
-                    step =
-                        Some(value.parse::<isize>().map_err(|_| {
-                            JSONPathError::syntax(String::from("invalid step"), index)
-                        })?);
+                    step = Some(self.parse_i_json_int(value, index)?);
                 }
             }
 
@@ -297,14 +287,11 @@ impl Parser {
                     kind: Index { ref value },
                     ..
                 } => {
-                    if value.len() > 1 && (value.starts_with('0') || value.starts_with("-0")) {
-                        return Err(JSONPathError::syntax(
-                            String::from("unexpected leading zero in index selector"),
-                            token.index,
-                        ));
-                    }
-                    let index = value.parse::<isize>().unwrap();
-                    Ok(Selector::Index { token, index })
+                    let array_index = self.parse_i_json_int(value, token.index)?;
+                    Ok(Selector::Index {
+                        token,
+                        index: array_index,
+                    })
                 }
                 tok => Err(JSONPathError::syntax(
                     format!("expected an index, found {}", tok.kind),
@@ -565,10 +552,10 @@ impl Parser {
                 kind: Int { value },
                 index,
             } => {
-                // TODO: error if out of range [-(2**53)+1, (2**53)-1]
                 let i = value.parse::<f64>().map_err(|_| {
                     JSONPathError::syntax(String::from("invalid integer literal"), *index)
                 })? as i64;
+
                 let token = it.next();
                 Ok(FilterExpression::new(
                     token,
@@ -888,16 +875,27 @@ impl Parser {
 
         false
     }
-}
 
-fn validate_index(value: &str, token_index: usize) -> Result<(), JSONPathError> {
-    if value.len() > 1 && (value.starts_with('0') || value.starts_with("-0")) {
-        Err(JSONPathError::syntax(
-            format!("invalid index '{}'", value),
-            token_index,
-        ))
-    } else {
-        Ok(())
+    fn parse_i_json_int(&self, value: &str, token_index: usize) -> Result<i64, JSONPathError> {
+        if value.len() > 1 && (value.starts_with('0') || value.starts_with("-0")) {
+            return Err(JSONPathError::syntax(
+                format!("invalid index '{}'", value),
+                token_index,
+            ));
+        }
+
+        let index = value.parse::<i64>().map_err(|_| {
+            JSONPathError::syntax(format!("invalid index '{}'", value), token_index)
+        })?;
+
+        if !self.env.index_range.contains(&index) {
+            return Err(JSONPathError::syntax(
+                format!("index out of range '{}'", value),
+                token_index,
+            ));
+        }
+
+        Ok(index)
     }
 }
 
