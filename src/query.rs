@@ -207,9 +207,6 @@ pub enum FilterExpressionType {
     Float {
         value: f64,
     },
-    Boolean {
-        expression: Box<FilterExpression>, // TODO: drop Boolean expression?
-    },
     Not {
         expression: Box<FilterExpression>,
     },
@@ -264,7 +261,6 @@ impl fmt::Display for FilterExpression {
             FilterExpressionType::String { value } => write!(f, "\"{value}\""),
             FilterExpressionType::Int { value } => write!(f, "{value}"),
             FilterExpressionType::Float { value } => write!(f, "{value}"),
-            FilterExpressionType::Boolean { expression } => write!(f, "{expression}"),
             FilterExpressionType::Not { expression } => write!(f, "!{expression}"),
             FilterExpressionType::Logical {
                 left,

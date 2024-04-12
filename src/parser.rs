@@ -350,7 +350,7 @@ impl Parser {
 
         Ok(Selector::Filter {
             token,
-            expression: Box::new(expr), // TODO: wrap expr in FilterExpression::Boolean?
+            expression: Box::new(expr),
         })
     }
 
