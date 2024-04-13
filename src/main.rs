@@ -1,10 +1,10 @@
 use rust_jsonpath::errors::JSONPathError;
-use rust_jsonpath::query::Query;
+use rust_jsonpath::Query;
 
 fn main() -> Result<(), JSONPathError> {
-    let q = Query::new("$[\"\\u0013\"]")?;
+    let q = Query::new("$..some[2]")?;
 
-    println!("{:?}", q);
+    println!("{:#?}", q);
     println!("{}", q);
 
     Ok(())

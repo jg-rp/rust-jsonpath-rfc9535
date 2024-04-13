@@ -17,9 +17,6 @@ macro_rules! parse_tests {
     }
 }
 
-// TODO: test str repr of filter function call
-// TODO: < and <= expr
-
 parse_tests! {
     just_root: ("$", "$"),
     shorthand_name: ("$.foo", "$['foo']"),
@@ -42,6 +39,8 @@ parse_tests! {
     filter_compare_eq: ("$.some[?(@.thing == 7)]", "$['some'][?@['thing'] == 7]"),
     filter_compare_ge: ("$.some[?(@.thing >= 7)]", "$['some'][?@['thing'] >= 7]"),
     filter_compare_ne: ("$.some[?(@.thing != 7)]", "$['some'][?@['thing'] != 7]"),
+    filter_compare_le: ("$.some[?(@.thing <= 7)]", "$['some'][?@['thing'] <= 7]"),
+    filter_compare_lt: ("$.some[?(@.thing < 7)]", "$['some'][?@['thing'] < 7]"),
     filter_boolean_literals: ("$.some[?(true == false)]", "$['some'][?true == false]"),
     filter_null_literal: ("$.some[?(@.thing == null)]", "$['some'][?@['thing'] == null]"),
     filter_string_literal: ("$.some[?(@.thing == 'foo')]", "$['some'][?@['thing'] == \"foo\"]"),
@@ -75,4 +74,5 @@ parse_tests! {
         "$['\\uD83D\\uDE00']",
         "$['😀']"
     ),
+    function_count: ("$[?count(@..*)>2]", "$[?count(@..[*]) > 2]"),
 }

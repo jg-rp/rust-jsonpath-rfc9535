@@ -360,11 +360,11 @@ impl Parser {
         it: &mut TokenStream,
         left: FilterExpression,
     ) -> Result<FilterExpression, JSONPathError> {
-        let token = it.next();
-        let precedence = self.precedence(&token.kind);
+        let op_token = it.next();
+        let precedence = self.precedence(&op_token.kind);
         let right = self.parse_filter_expression(it, precedence)?;
 
-        match token.kind {
+        match op_token.kind {
             And => {
                 if left.is_literal() || right.is_literal() {
                     Err(JSONPathError::syntax(
@@ -373,7 +373,7 @@ impl Parser {
                     ))
                 } else {
                     Ok(FilterExpression::new(
-                        token,
+                        left.token.clone(),
                         FilterExpressionType::Logical {
                             left: Box::new(left),
                             operator: LogicalOperator::And,
@@ -390,7 +390,7 @@ impl Parser {
                     ))
                 } else {
                     Ok(FilterExpression::new(
-                        token,
+                        left.token.clone(),
                         FilterExpressionType::Logical {
                             left: Box::new(left),
                             operator: LogicalOperator::Or,
@@ -403,7 +403,7 @@ impl Parser {
                 self.assert_comparable(&left, left.token.index)?;
                 self.assert_comparable(&right, right.token.index)?;
                 Ok(FilterExpression::new(
-                    token,
+                    left.token.clone(),
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Eq,
@@ -415,7 +415,7 @@ impl Parser {
                 self.assert_comparable(&left, left.token.index)?;
                 self.assert_comparable(&right, right.token.index)?;
                 Ok(FilterExpression::new(
-                    token,
+                    left.token.clone(),
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Ge,
@@ -427,7 +427,7 @@ impl Parser {
                 self.assert_comparable(&left, left.token.index)?;
                 self.assert_comparable(&right, right.token.index)?;
                 Ok(FilterExpression::new(
-                    token,
+                    left.token.clone(),
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Gt,
@@ -439,7 +439,7 @@ impl Parser {
                 self.assert_comparable(&left, left.token.index)?;
                 self.assert_comparable(&right, right.token.index)?;
                 Ok(FilterExpression::new(
-                    token,
+                    left.token.clone(),
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Le,
@@ -451,7 +451,7 @@ impl Parser {
                 self.assert_comparable(&left, left.token.index)?;
                 self.assert_comparable(&right, right.token.index)?;
                 Ok(FilterExpression::new(
-                    token,
+                    left.token.clone(),
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Lt,
@@ -463,7 +463,7 @@ impl Parser {
                 self.assert_comparable(&left, left.token.index)?;
                 self.assert_comparable(&right, right.token.index)?;
                 Ok(FilterExpression::new(
-                    token,
+                    left.token.clone(),
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Ne,
@@ -472,8 +472,8 @@ impl Parser {
                 ))
             }
             _ => Err(JSONPathError::syntax(
-                format!("unexpected infix operator {}", token.kind),
-                token.index,
+                format!("unexpected infix operator {}", op_token.kind),
+                op_token.index,
             )),
         }
     }
