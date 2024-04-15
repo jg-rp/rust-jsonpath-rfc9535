@@ -61,4 +61,19 @@ impl Env {
             functions,
         }
     }
+
+    pub fn add_function(
+        &mut self,
+        name: &str,
+        params: Vec<ExpressionType>,
+        returns: ExpressionType,
+    ) {
+        self.functions.insert(
+            name.to_owned(),
+            FunctionSignature {
+                param_types: params,
+                return_type: returns,
+            },
+        );
+    }
 }

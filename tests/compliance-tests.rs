@@ -9,7 +9,7 @@ macro_rules! assert_valid {
             #[test]
             fn $name() -> Result<(), JSONPathError> {
                 let input = $value;
-                Query::new(input)?;
+                Query::from_str(input)?;
                 Ok(())
             }
         )*
@@ -27,7 +27,7 @@ macro_rules! assert_invalid {
             #[should_panic]
             fn $name() {
                 let input = $value;
-                Query::new(input).unwrap();
+                Query::from_str(input).unwrap();
             }
         )*
         }
@@ -485,23 +485,23 @@ assert_invalid! {
 #[test]
 #[should_panic]
 fn invalid_u13() {
-    Query::new("$[\"\\u0013\"]").unwrap();
+    Query::from_str("$[\"\\u0013\"]").unwrap();
 }
 
 #[test]
 #[should_panic(expected = "invalid escape sequence")]
 fn invalid_escape() {
-    Query::new("$['\\\"']").unwrap();
+    Query::from_str("$['\\\"']").unwrap();
 }
 
 #[test]
 #[should_panic(expected = "unclosed string")]
 fn invalid_unescaped_single_quote() {
-    Query::new("$[''']").unwrap();
+    Query::from_str("$[''']").unwrap();
 }
 
 #[test]
 #[should_panic(expected = "argument 1 of count() must be of a 'Nodes' type")]
 fn function_expects_nodes_type() {
-    Query::new("$[?count(1)>2]").unwrap();
+    Query::from_str("$[?count(1)>2]").unwrap();
 }

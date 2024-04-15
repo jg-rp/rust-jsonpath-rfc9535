@@ -1,11 +1,11 @@
 use std::fmt::{self, Write};
 
-use crate::{env::Env, errors::JSONPathError, lexer::lex, parser::Parser, token::Token};
+use crate::{errors::JSONPathError, lexer::lex, parser::Parser, token::Token};
 
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref PARSER: Parser = Parser::new(Env::standard());
+    static ref PARSER: Parser = Parser::standard();
 }
 
 #[derive(Debug)]
@@ -28,7 +28,12 @@ impl fmt::Display for Query {
 }
 
 impl Query {
-    pub fn new(expr: &str) -> Result<Self, JSONPathError> {
+    pub fn new(segments: Vec<Segment>) -> Self {
+        Query { segments }
+    }
+
+    // XXX: uses the standard environment
+    pub fn from_str(expr: &str) -> Result<Self, JSONPathError> {
         Ok(Query {
             segments: PARSER.parse(lex(expr)?)?,
         })
@@ -62,6 +67,8 @@ impl Query {
         true
     }
 }
+
+// TODO: we don't need the token for each segment/selector/expr, just the index
 
 #[derive(Debug)]
 pub enum Segment {
@@ -193,6 +200,7 @@ impl fmt::Display for ComparisonOperator {
     }
 }
 
+// TODO: make all variants structs for the benefit of PyO3
 #[derive(Debug)]
 pub enum FilterExpressionType {
     True,

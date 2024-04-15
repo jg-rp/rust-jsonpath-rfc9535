@@ -3,6 +3,7 @@ use std::{iter::Peekable, vec::IntoIter};
 use crate::{
     env::{Env, ExpressionType, FunctionSignature},
     errors::{JSONPathError, JSONPathErrorType},
+    lexer::lex,
     query::{
         ComparisonOperator, FilterExpression, FilterExpressionType, LogicalOperator, Query,
         Segment, Selector,
@@ -54,6 +55,25 @@ impl Parser {
         Parser { env }
     }
 
+    pub fn standard() -> Self {
+        Parser {
+            env: Env::standard(),
+        }
+    }
+
+    pub fn add_function(
+        &mut self,
+        name: &str,
+        params: Vec<ExpressionType>,
+        returns: ExpressionType,
+    ) {
+        self.env.add_function(name, params, returns);
+    }
+
+    pub fn from_str(&self, query: &str) -> Result<Query, JSONPathError> {
+        Ok(Query::new(self.parse(lex(query)?)?))
+    }
+
     pub fn parse(&self, tokens: Vec<Token>) -> Result<Vec<Segment>, JSONPathError> {
         let mut it = TokenStream {
             tokens: tokens.into_iter().peekable(),
@@ -62,7 +82,7 @@ impl Parser {
         match it.next() {
             Token { kind: Root, .. } => {
                 let segments = self.parse_segments(&mut it)?;
-                // parse_query should have consumed all tokens
+                // parse_segments should have consumed all tokens
                 match it.next() {
                     Token { kind: Eoq, .. } => Ok(segments),
                     token => Err(JSONPathError::syntax(

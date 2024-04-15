@@ -137,7 +137,7 @@ mod tests {
 
         b.iter(|| {
             for q in queries.iter() {
-                Query::new(q).unwrap();
+                Query::from_str(q).unwrap();
             }
         });
     }
