@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use crate::{errors::JSONPathError, parser::Parser, token::Token};
+use crate::{errors::JSONPathError, parser::Parser};
 
 use lazy_static::lazy_static;
 
@@ -65,16 +65,14 @@ impl Query {
     }
 }
 
-// TODO: we don't need the token for each segment/selector/expr, just the index
-
 #[derive(Debug)]
 pub enum Segment {
     Child {
-        token: Token,
+        index: usize,
         selectors: Vec<Selector>,
     },
     Recursive {
-        token: Token,
+        index: usize,
         selectors: Vec<Selector>,
     },
 }
@@ -111,24 +109,24 @@ impl fmt::Display for Segment {
 #[derive(Debug)]
 pub enum Selector {
     Name {
-        token: Token,
+        index: usize,
         name: String,
     },
     Index {
-        token: Token,
-        index: i64,
+        index: usize,
+        array_index: i64,
     },
     Slice {
-        token: Token,
+        index: usize,
         start: Option<i64>,
         stop: Option<i64>,
         step: Option<i64>,
     },
     Wild {
-        token: Token,
+        index: usize,
     },
     Filter {
-        token: Token,
+        index: usize,
         expression: Box<FilterExpression>,
     },
 }
@@ -137,7 +135,7 @@ impl fmt::Display for Selector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Selector::Name { name, .. } => write!(f, "'{name}'"),
-            Selector::Index { index, .. } => write!(f, "{index}"),
+            Selector::Index { array_index, .. } => write!(f, "{array_index}"),
             Selector::Slice {
                 start, stop, step, ..
             } => {
@@ -239,13 +237,13 @@ pub enum FilterExpressionType {
 
 #[derive(Debug)]
 pub struct FilterExpression {
-    pub token: Token,
+    pub index: usize,
     pub kind: FilterExpressionType,
 }
 
 impl FilterExpression {
-    pub fn new(token: Token, kind: FilterExpressionType) -> Self {
-        FilterExpression { token, kind }
+    pub fn new(index: usize, kind: FilterExpressionType) -> Self {
+        FilterExpression { index, kind }
     }
 
     pub fn is_literal(&self) -> bool {

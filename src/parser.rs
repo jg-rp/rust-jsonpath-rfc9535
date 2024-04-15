@@ -171,12 +171,18 @@ impl Parser {
                 DoubleDot => {
                     let token = it.next();
                     let selectors = self.parse_selectors(it)?;
-                    segments.push(Segment::Recursive { token, selectors });
+                    segments.push(Segment::Recursive {
+                        index: token.index,
+                        selectors,
+                    });
                 }
                 LBracket | Name { .. } | Wild => {
                     let token = (*it.peek()).clone();
                     let selectors = self.parse_selectors(it)?;
-                    segments.push(Segment::Child { token, selectors });
+                    segments.push(Segment::Child {
+                        index: token.index,
+                        selectors,
+                    });
                 }
                 _ => {
                     break;
@@ -195,9 +201,14 @@ impl Parser {
             } => {
                 let name = unescape_string(value, index)?;
                 let token = it.next();
-                Ok(vec![Selector::Name { token, name }])
+                Ok(vec![Selector::Name {
+                    index: token.index,
+                    name,
+                }])
             }
-            Token { kind: Wild, .. } => Ok(vec![Selector::Wild { token: it.next() }]),
+            Token { kind: Wild, .. } => Ok(vec![Selector::Wild {
+                index: it.next().index,
+            }]),
             Token { kind: LBracket, .. } => self.parse_bracketed(it),
             _ => Ok(Vec::new()),
         }
@@ -232,7 +243,10 @@ impl Parser {
                 } => {
                     let name = unescape_string(value, index)?;
                     let token = it.next();
-                    selectors.push(Selector::Name { token, name });
+                    selectors.push(Selector::Name {
+                        index: token.index,
+                        name,
+                    });
                 }
                 Token {
                     kind: SingleQuoteString { value },
@@ -240,11 +254,14 @@ impl Parser {
                 } => {
                     let name = unescape_string(&value.replace("\\'", "'"), index)?;
                     let token = it.next();
-                    selectors.push(Selector::Name { token, name });
+                    selectors.push(Selector::Name {
+                        index: token.index,
+                        name,
+                    });
                 }
                 Token { kind: Wild, .. } => {
                     let token = it.next();
-                    selectors.push(Selector::Wild { token });
+                    selectors.push(Selector::Wild { index: token.index });
                 }
                 Token { kind: Filter, .. } => {
                     let selector = self.parse_filter(it)?;
@@ -361,7 +378,7 @@ impl Parser {
             }
 
             Ok(Selector::Slice {
-                token,
+                index: token.index,
                 start,
                 stop,
                 step,
@@ -375,8 +392,8 @@ impl Parser {
                 } => {
                     let array_index = self.parse_i_json_int(value, token.index)?;
                     Ok(Selector::Index {
-                        token,
-                        index: array_index,
+                        index: token.index,
+                        array_index,
                     })
                 }
                 tok => Err(JSONPathError::syntax(
@@ -409,7 +426,7 @@ impl Parser {
             {
                 return Err(JSONPathError::typ(
                     format!("result of {}() must be compared", name),
-                    expr.token.index,
+                    expr.index,
                 ));
             }
         }
@@ -417,12 +434,12 @@ impl Parser {
         if expr.is_literal() {
             return Err(JSONPathError::typ(
                 String::from("filter expression literals must be compared"),
-                expr.token.index,
+                expr.index,
             ));
         }
 
         Ok(Selector::Filter {
-            token,
+            index: token.index,
             expression: Box::new(expr),
         })
     }
@@ -434,7 +451,7 @@ impl Parser {
         let token = it.next();
         let expr = self.parse_filter_expression(it, PRECEDENCE_LOGICAL_NOT)?;
         Ok(FilterExpression::new(
-            token,
+            token.index,
             FilterExpressionType::Not {
                 expression: Box::new(expr),
             },
@@ -455,11 +472,11 @@ impl Parser {
                 if left.is_literal() || right.is_literal() {
                     Err(JSONPathError::syntax(
                         String::from("filter expression literals must be compared"),
-                        left.token.index,
+                        left.index,
                     ))
                 } else {
                     Ok(FilterExpression::new(
-                        left.token.clone(),
+                        left.index,
                         FilterExpressionType::Logical {
                             left: Box::new(left),
                             operator: LogicalOperator::And,
@@ -472,11 +489,11 @@ impl Parser {
                 if left.is_literal() || right.is_literal() {
                     Err(JSONPathError::syntax(
                         String::from("filter expression literals must be compared"),
-                        left.token.index,
+                        left.index,
                     ))
                 } else {
                     Ok(FilterExpression::new(
-                        left.token.clone(),
+                        left.index,
                         FilterExpressionType::Logical {
                             left: Box::new(left),
                             operator: LogicalOperator::Or,
@@ -486,10 +503,10 @@ impl Parser {
                 }
             }
             Eq => {
-                self.assert_comparable(&left, left.token.index)?;
-                self.assert_comparable(&right, right.token.index)?;
+                self.assert_comparable(&left, left.index)?;
+                self.assert_comparable(&right, right.index)?;
                 Ok(FilterExpression::new(
-                    left.token.clone(),
+                    left.index,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Eq,
@@ -498,10 +515,10 @@ impl Parser {
                 ))
             }
             Ge => {
-                self.assert_comparable(&left, left.token.index)?;
-                self.assert_comparable(&right, right.token.index)?;
+                self.assert_comparable(&left, left.index)?;
+                self.assert_comparable(&right, right.index)?;
                 Ok(FilterExpression::new(
-                    left.token.clone(),
+                    left.index,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Ge,
@@ -510,10 +527,10 @@ impl Parser {
                 ))
             }
             Gt => {
-                self.assert_comparable(&left, left.token.index)?;
-                self.assert_comparable(&right, right.token.index)?;
+                self.assert_comparable(&left, left.index)?;
+                self.assert_comparable(&right, right.index)?;
                 Ok(FilterExpression::new(
-                    left.token.clone(),
+                    left.index,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Gt,
@@ -522,10 +539,10 @@ impl Parser {
                 ))
             }
             Le => {
-                self.assert_comparable(&left, left.token.index)?;
-                self.assert_comparable(&right, right.token.index)?;
+                self.assert_comparable(&left, left.index)?;
+                self.assert_comparable(&right, right.index)?;
                 Ok(FilterExpression::new(
-                    left.token.clone(),
+                    left.index,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Le,
@@ -534,10 +551,10 @@ impl Parser {
                 ))
             }
             Lt => {
-                self.assert_comparable(&left, left.token.index)?;
-                self.assert_comparable(&right, right.token.index)?;
+                self.assert_comparable(&left, left.index)?;
+                self.assert_comparable(&right, right.index)?;
                 Ok(FilterExpression::new(
-                    left.token.clone(),
+                    left.index,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Lt,
@@ -546,10 +563,10 @@ impl Parser {
                 ))
             }
             Ne => {
-                self.assert_comparable(&left, left.token.index)?;
-                self.assert_comparable(&right, right.token.index)?;
+                self.assert_comparable(&left, left.index)?;
+                self.assert_comparable(&right, right.index)?;
                 Ok(FilterExpression::new(
-                    left.token.clone(),
+                    left.index,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Ne,
@@ -609,13 +626,16 @@ impl Parser {
                 let value = unescape_string(value, index)?;
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token,
+                    token.index,
                     FilterExpressionType::String { value },
                 ))
             }
             Token { kind: False, .. } => {
                 let token = it.next();
-                Ok(FilterExpression::new(token, FilterExpressionType::False))
+                Ok(FilterExpression::new(
+                    token.index,
+                    FilterExpressionType::False,
+                ))
             }
             Token {
                 kind: Float { ref value },
@@ -626,7 +646,7 @@ impl Parser {
                 })?;
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token,
+                    token.index,
                     FilterExpressionType::Float { value: f },
                 ))
             }
@@ -644,19 +664,22 @@ impl Parser {
 
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token,
+                    token.index,
                     FilterExpressionType::Int { value: i },
                 ))
             }
             Token { kind: Null, .. } => {
                 let token = it.next();
-                Ok(FilterExpression::new(token, FilterExpressionType::Null))
+                Ok(FilterExpression::new(
+                    token.index,
+                    FilterExpressionType::Null,
+                ))
             }
             Token { kind: Root, .. } => {
                 let token = it.next();
                 let segments = self.parse_segments(it)?;
                 Ok(FilterExpression::new(
-                    token,
+                    token.index,
                     FilterExpressionType::RootQuery {
                         query: Box::new(Query { segments }),
                     },
@@ -666,7 +689,7 @@ impl Parser {
                 let token = it.next();
                 let segments = self.parse_segments(it)?;
                 Ok(FilterExpression::new(
-                    token,
+                    token.index,
                     FilterExpressionType::RelativeQuery {
                         query: Box::new(Query { segments }),
                     },
@@ -679,13 +702,16 @@ impl Parser {
                 let value = unescape_string(&value.replace("\\'", "'"), index)?;
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token,
+                    token.index,
                     FilterExpressionType::String { value },
                 ))
             }
             Token { kind: True, .. } => {
                 let token = it.next();
-                Ok(FilterExpression::new(token, FilterExpressionType::True))
+                Ok(FilterExpression::new(
+                    token.index,
+                    FilterExpressionType::True,
+                ))
             }
             Token { kind: LParen, .. } => self.parse_grouped_expression(it),
             Token { kind: Not, .. } => self.parse_not_expression(it),
@@ -732,7 +758,7 @@ impl Parser {
             let function_name = name.to_string();
             self.assert_well_typed(&function_name, &arguments, &token)?;
             Ok(FilterExpression::new(
-                token,
+                token.index,
                 FilterExpressionType::Function {
                     name: function_name,
                     args: arguments,
