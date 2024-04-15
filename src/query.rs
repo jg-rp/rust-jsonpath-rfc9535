@@ -195,12 +195,11 @@ impl fmt::Display for ComparisonOperator {
     }
 }
 
-// TODO: make all variants structs for the benefit of PyO3
 #[derive(Debug)]
 pub enum FilterExpressionType {
-    True,
-    False,
-    Null,
+    True {},
+    False {},
+    Null {},
     String {
         value: String,
     },
@@ -250,7 +249,7 @@ impl FilterExpression {
         use FilterExpressionType::*;
         matches!(
             self.kind,
-            True | False | Null | String { .. } | Int { .. } | Float { .. }
+            True {} | False {} | Null {} | String { .. } | Int { .. } | Float { .. }
         )
     }
 }
@@ -258,9 +257,9 @@ impl FilterExpression {
 impl fmt::Display for FilterExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            FilterExpressionType::True => f.write_str("true"),
-            FilterExpressionType::False => f.write_str("false"),
-            FilterExpressionType::Null => f.write_str("null"),
+            FilterExpressionType::True {} => f.write_str("true"),
+            FilterExpressionType::False {} => f.write_str("false"),
+            FilterExpressionType::Null {} => f.write_str("null"),
             FilterExpressionType::String { value } => write!(f, "\"{value}\""),
             FilterExpressionType::Int { value } => write!(f, "{value}"),
             FilterExpressionType::Float { value } => write!(f, "{value}"),

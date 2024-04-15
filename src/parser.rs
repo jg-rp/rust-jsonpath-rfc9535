@@ -634,7 +634,7 @@ impl Parser {
                 let token = it.next();
                 Ok(FilterExpression::new(
                     token.index,
-                    FilterExpressionType::False,
+                    FilterExpressionType::False {},
                 ))
             }
             Token {
@@ -672,7 +672,7 @@ impl Parser {
                 let token = it.next();
                 Ok(FilterExpression::new(
                     token.index,
-                    FilterExpressionType::Null,
+                    FilterExpressionType::Null {},
                 ))
             }
             Token { kind: Root, .. } => {
@@ -710,7 +710,7 @@ impl Parser {
                 let token = it.next();
                 Ok(FilterExpression::new(
                     token.index,
-                    FilterExpressionType::True,
+                    FilterExpressionType::True {},
                 ))
             }
             Token { kind: LParen, .. } => self.parse_grouped_expression(it),
