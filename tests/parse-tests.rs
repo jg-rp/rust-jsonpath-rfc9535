@@ -8,7 +8,7 @@ macro_rules! parse_tests {
             #[test]
             fn $name() -> Result<(), JSONPathError> {
                 let (input, expected) = $value;
-                let query = Query::from_str(input)?;
+                let query = Query::standard(input)?;
                 assert_eq!(format!("{}", query), expected);
                 Ok(())
             }

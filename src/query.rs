@@ -1,11 +1,11 @@
 use std::fmt::{self, Write};
 
-use crate::{errors::JSONPathError, lexer::lex, parser::Parser, token::Token};
+use crate::{errors::JSONPathError, parser::Parser, token::Token};
 
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref PARSER: Parser = Parser::standard();
+    static ref PARSER: Parser = Parser::new();
 }
 
 #[derive(Debug)]
@@ -32,11 +32,8 @@ impl Query {
         Query { segments }
     }
 
-    // XXX: uses the standard environment
-    pub fn from_str(expr: &str) -> Result<Self, JSONPathError> {
-        Ok(Query {
-            segments: PARSER.parse(lex(expr)?)?,
-        })
+    pub fn standard(expr: &str) -> Result<Self, JSONPathError> {
+        PARSER.parse(expr)
     }
 
     pub fn is_empty(&self) -> bool {

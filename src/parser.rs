@@ -1,7 +1,6 @@
-use std::{iter::Peekable, vec::IntoIter};
+use std::{collections::HashMap, iter::Peekable, ops::RangeInclusive, vec::IntoIter};
 
 use crate::{
-    env::{Env, ExpressionType, FunctionSignature},
     errors::{JSONPathError, JSONPathErrorType},
     lexer::lex,
     query::{
@@ -23,6 +22,63 @@ const PRECEDENCE_LOGICAL_OR: u8 = 3;
 const PRECEDENCE_LOGICAL_AND: u8 = 4;
 const PRECEDENCE_RELATIONAL: u8 = 5;
 const PRECEDENCE_LOGICAL_NOT: u8 = 7;
+
+pub enum ExpressionType {
+    Logical,
+    Nodes,
+    Value,
+}
+
+pub struct FunctionSignature {
+    pub param_types: Vec<ExpressionType>,
+    pub return_type: ExpressionType,
+}
+
+pub fn standard_functions() -> HashMap<String, FunctionSignature> {
+    let mut functions = HashMap::new();
+
+    functions.insert(
+        "count".to_owned(),
+        FunctionSignature {
+            param_types: vec![ExpressionType::Nodes],
+            return_type: ExpressionType::Value,
+        },
+    );
+
+    functions.insert(
+        "length".to_owned(),
+        FunctionSignature {
+            param_types: vec![ExpressionType::Value],
+            return_type: ExpressionType::Value,
+        },
+    );
+
+    functions.insert(
+        "match".to_owned(),
+        FunctionSignature {
+            param_types: vec![ExpressionType::Value, ExpressionType::Value],
+            return_type: ExpressionType::Logical,
+        },
+    );
+
+    functions.insert(
+        "search".to_owned(),
+        FunctionSignature {
+            param_types: vec![ExpressionType::Value, ExpressionType::Value],
+            return_type: ExpressionType::Logical,
+        },
+    );
+
+    functions.insert(
+        "value".to_owned(),
+        FunctionSignature {
+            param_types: vec![ExpressionType::Nodes],
+            return_type: ExpressionType::Value,
+        },
+    );
+
+    functions
+}
 
 struct TokenStream {
     tokens: Peekable<IntoIter<Token>>,
@@ -47,17 +103,21 @@ impl TokenStream {
 }
 
 pub struct Parser {
-    pub env: Env,
+    pub index_range: RangeInclusive<i64>,
+    pub functions: HashMap<String, FunctionSignature>,
+}
+
+impl Default for Parser {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Parser {
-    pub fn new(env: Env) -> Self {
-        Parser { env }
-    }
-
-    pub fn standard() -> Self {
+    pub fn new() -> Self {
         Parser {
-            env: Env::standard(),
+            index_range: ((-2_i64).pow(53) + 1..=2_i64.pow(53) - 1),
+            functions: standard_functions(),
         }
     }
 
@@ -67,14 +127,20 @@ impl Parser {
         params: Vec<ExpressionType>,
         returns: ExpressionType,
     ) {
-        self.env.add_function(name, params, returns);
+        self.functions.insert(
+            name.to_owned(),
+            FunctionSignature {
+                param_types: params,
+                return_type: returns,
+            },
+        );
     }
 
-    pub fn from_str(&self, query: &str) -> Result<Query, JSONPathError> {
-        Ok(Query::new(self.parse(lex(query)?)?))
+    pub fn parse(&self, query: &str) -> Result<Query, JSONPathError> {
+        Ok(Query::new(self.parse_tokens(lex(query)?)?))
     }
 
-    pub fn parse(&self, tokens: Vec<Token>) -> Result<Vec<Segment>, JSONPathError> {
+    pub fn parse_tokens(&self, tokens: Vec<Token>) -> Result<Vec<Segment>, JSONPathError> {
         let mut it = TokenStream {
             tokens: tokens.into_iter().peekable(),
         };
@@ -339,7 +405,7 @@ impl Parser {
             if let Some(FunctionSignature {
                 return_type: ExpressionType::Value,
                 ..
-            }) = self.env.functions.get(name)
+            }) = self.functions.get(name)
             {
                 return Err(JSONPathError::typ(
                     format!("result of {}() must be compared", name),
@@ -733,7 +799,7 @@ impl Parser {
                 if let Some(FunctionSignature {
                     return_type: ExpressionType::Value,
                     ..
-                }) = self.env.functions.get(name)
+                }) = self.functions.get(name)
                 {
                     Ok(())
                 } else {
@@ -753,7 +819,7 @@ impl Parser {
         args: &[FilterExpression],
         token: &Token,
     ) -> Result<(), JSONPathError> {
-        let signature = self.env.functions.get(func_name).ok_or_else(|| {
+        let signature = self.functions.get(func_name).ok_or_else(|| {
             JSONPathError::name(format!("unknown function '{}'", func_name), token.index)
         })?;
 
@@ -858,7 +924,7 @@ impl Parser {
             if let Some(FunctionSignature {
                 return_type: ExpressionType::Value,
                 ..
-            }) = self.env.functions.get(name)
+            }) = self.functions.get(name)
             {
                 return true;
             }
@@ -887,7 +953,7 @@ impl Parser {
             if let Some(FunctionSignature {
                 return_type: ExpressionType::Nodes,
                 ..
-            }) = self.env.functions.get(name)
+            }) = self.functions.get(name)
             {
                 return true;
             }
@@ -908,7 +974,7 @@ impl Parser {
             JSONPathError::syntax(format!("invalid index '{}'", value), token_index)
         })?;
 
-        if !self.env.index_range.contains(&index) {
+        if !self.index_range.contains(&index) {
             return Err(JSONPathError::syntax(
                 format!("index out of range '{}'", value),
                 token_index,
