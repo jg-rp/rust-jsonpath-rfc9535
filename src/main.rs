@@ -5,9 +5,9 @@ fn main() -> Result<(), JSONPathError> {
     // let parser = Parser::new();
     // let qq = parser.parse("$..some[2]")?;
 
-    let q = Query::standard("$..some[2]")?;
+    let q = Query::standard("$[?((@.foo))]")?;
 
-    println!("{:#?}", q);
+    println!("{:?}", q);
     println!("{}", q);
 
     Ok(())

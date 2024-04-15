@@ -590,8 +590,13 @@ impl Parser {
 
         loop {
             match it.peek() {
+                Token { kind: RParen, .. } => break,
                 Token {
-                    kind: Eoq,
+                    kind: Eq | Ge | Gt | Le | Lt | Ne | And | Or,
+                    ..
+                } => expr = self.parse_infix_expression(it, expr)?,
+                Token {
+                    kind: Eoq | RBracket,
                     ref index,
                 } => {
                     return Err(JSONPathError::syntax(
@@ -599,8 +604,12 @@ impl Parser {
                         *index,
                     ));
                 }
-                Token { kind: RParen, .. } => break,
-                _ => expr = self.parse_infix_expression(it, expr)?,
+                Token { kind, index } => {
+                    return Err(JSONPathError::syntax(
+                        format!("expected an expression, found {}", kind),
+                        *index,
+                    ));
+                }
             }
         }
 
@@ -716,7 +725,7 @@ impl Parser {
             Token { kind: LParen, .. } => self.parse_grouped_expression(it),
             Token { kind: Not, .. } => self.parse_not_expression(it),
             Token { kind, index } => Err(JSONPathError::syntax(
-                format!("unexpected basic expression token {}", kind),
+                format!("expected a filter expression, found {}", kind),
                 *index,
             )),
         }

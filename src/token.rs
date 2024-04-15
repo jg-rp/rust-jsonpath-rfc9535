@@ -43,7 +43,7 @@ pub enum TokenType {
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenType::Eoq => f.write_str("end of query"),
+            TokenType::Eoq => f.write_str("'end of query'"),
             TokenType::Error { msg } => write!(f, "error: {}", *msg),
             TokenType::Colon => f.write_str("';'"),
             TokenType::Comma => f.write_str("','"),
