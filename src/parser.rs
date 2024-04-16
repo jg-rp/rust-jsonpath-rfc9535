@@ -14,7 +14,7 @@ use TokenType::*;
 
 const EOF_TOKEN: Token = Token {
     kind: Eoq,
-    index: 0, // change to usize max?
+    span: (0, 1), // TODO: change to usize max?
 };
 
 const PRECEDENCE_LOWEST: u8 = 1;
@@ -153,13 +153,13 @@ impl Parser {
                     Token { kind: Eoq, .. } => Ok(segments),
                     token => Err(JSONPathError::syntax(
                         format!("expected end of query, found {}", token.kind),
-                        token.index,
+                        token.span,
                     )),
                 }
             }
             token => Err(JSONPathError::syntax(
                 format!("expected '$', found {}", token.kind),
-                token.index,
+                token.span,
             )),
         }
     }
@@ -172,7 +172,7 @@ impl Parser {
                     let token = it.next();
                     let selectors = self.parse_selectors(it)?;
                     segments.push(Segment::Recursive {
-                        index: token.index,
+                        span: token.span, // TODO: span whole of segment?
                         selectors,
                     });
                 }
@@ -180,7 +180,7 @@ impl Parser {
                     let token = (*it.peek()).clone();
                     let selectors = self.parse_selectors(it)?;
                     segments.push(Segment::Child {
-                        index: token.index,
+                        span: token.span,
                         selectors,
                     });
                 }
@@ -197,17 +197,17 @@ impl Parser {
         match it.peek() {
             Token {
                 kind: Name { value },
-                index,
+                span,
             } => {
-                let name = unescape_string(value, index)?;
+                let name = unescape_string(value, span)?;
                 let token = it.next();
                 Ok(vec![Selector::Name {
-                    index: token.index,
+                    span: token.span,
                     name,
                 }])
             }
             Token { kind: Wild, .. } => Ok(vec![Selector::Wild {
-                index: it.next().index,
+                span: it.next().span,
             }]),
             Token { kind: LBracket, .. } => self.parse_bracketed(it),
             _ => Ok(Vec::new()),
@@ -239,29 +239,29 @@ impl Parser {
                 }
                 Token {
                     kind: DoubleQuoteString { value },
-                    index,
+                    span,
                 } => {
-                    let name = unescape_string(value, index)?;
+                    let name = unescape_string(value, span)?;
                     let token = it.next();
                     selectors.push(Selector::Name {
-                        index: token.index,
+                        span: token.span,
                         name,
                     });
                 }
                 Token {
                     kind: SingleQuoteString { value },
-                    index,
+                    span,
                 } => {
-                    let name = unescape_string(&value.replace("\\'", "'"), index)?;
+                    let name = unescape_string(&value.replace("\\'", "'"), span)?;
                     let token = it.next();
                     selectors.push(Selector::Name {
-                        index: token.index,
+                        span: token.span,
                         name,
                     });
                 }
                 Token { kind: Wild, .. } => {
                     let token = it.next();
-                    selectors.push(Selector::Wild { index: token.index });
+                    selectors.push(Selector::Wild { span: token.span });
                 }
                 Token { kind: Filter, .. } => {
                     let selector = self.parse_filter(it)?;
@@ -270,13 +270,13 @@ impl Parser {
                 Token { kind: Eoq, .. } => {
                     return Err(JSONPathError::syntax(
                         String::from("unexpected end of query"),
-                        token.index,
+                        token.span,
                     ));
                 }
                 token => {
                     return Err(JSONPathError::syntax(
                         format!("unexpected selector token {}", token.kind),
-                        token.index,
+                        token.span,
                     ));
                 }
             }
@@ -304,7 +304,7 @@ impl Parser {
                     return Err(JSONPathError::new(
                         JSONPathErrorType::SyntaxError,
                         format!("expected a comma or closing bracket, found {}", token.kind),
-                        token.index,
+                        token.span,
                     ));
                 }
             }
@@ -314,7 +314,7 @@ impl Parser {
             return Err(JSONPathError::new(
                 JSONPathErrorType::SyntaxError,
                 String::from("empty bracketed selection"),
-                token.index,
+                token.span,
             ));
         }
 
@@ -345,10 +345,10 @@ impl Parser {
             // 1: or :
             if let Token {
                 kind: Index { ref value },
-                index,
+                span,
             } = &token
             {
-                start = Some(self.parse_i_json_int(value, *index)?);
+                start = Some(self.parse_i_json_int(value, *span)?);
                 it.next(); // eat colon
             }
 
@@ -356,10 +356,10 @@ impl Parser {
             if matches!(it.peek().kind, Index { .. } | Colon) {
                 if let Token {
                     kind: Index { ref value },
-                    index,
+                    span,
                 } = it.next()
                 {
-                    stop = Some(self.parse_i_json_int(value, index)?);
+                    stop = Some(self.parse_i_json_int(value, span)?);
                     if it.peek().kind == Colon {
                         it.next(); // eat colon
                     }
@@ -370,15 +370,15 @@ impl Parser {
             if matches!(it.peek().kind, Index { .. }) {
                 if let Token {
                     kind: Index { ref value },
-                    index,
+                    span,
                 } = it.next()
                 {
-                    step = Some(self.parse_i_json_int(value, index)?);
+                    step = Some(self.parse_i_json_int(value, span)?);
                 }
             }
 
             Ok(Selector::Slice {
-                index: token.index,
+                span: token.span,
                 start,
                 stop,
                 step,
@@ -390,15 +390,15 @@ impl Parser {
                     kind: Index { ref value },
                     ..
                 } => {
-                    let array_index = self.parse_i_json_int(value, token.index)?;
+                    let array_index = self.parse_i_json_int(value, token.span)?;
                     Ok(Selector::Index {
-                        index: token.index,
-                        array_index,
+                        span: token.span,
+                        index: array_index,
                     })
                 }
                 tok => Err(JSONPathError::syntax(
                     format!("expected an index, found {}", tok.kind),
-                    tok.index,
+                    tok.span,
                 )),
             }
         }
@@ -426,7 +426,7 @@ impl Parser {
             {
                 return Err(JSONPathError::typ(
                     format!("result of {}() must be compared", name),
-                    expr.index,
+                    expr.span,
                 ));
             }
         }
@@ -434,12 +434,12 @@ impl Parser {
         if expr.is_literal() {
             return Err(JSONPathError::typ(
                 String::from("filter expression literals must be compared"),
-                expr.index,
+                expr.span,
             ));
         }
 
         Ok(Selector::Filter {
-            index: token.index,
+            span: token.span,
             expression: Box::new(expr),
         })
     }
@@ -451,7 +451,7 @@ impl Parser {
         let token = it.next();
         let expr = self.parse_filter_expression(it, PRECEDENCE_LOGICAL_NOT)?;
         Ok(FilterExpression::new(
-            token.index,
+            token.span,
             FilterExpressionType::Not {
                 expression: Box::new(expr),
             },
@@ -472,11 +472,11 @@ impl Parser {
                 if left.is_literal() || right.is_literal() {
                     Err(JSONPathError::syntax(
                         String::from("filter expression literals must be compared"),
-                        left.index,
+                        left.span,
                     ))
                 } else {
                     Ok(FilterExpression::new(
-                        left.index,
+                        left.span,
                         FilterExpressionType::Logical {
                             left: Box::new(left),
                             operator: LogicalOperator::And,
@@ -489,11 +489,11 @@ impl Parser {
                 if left.is_literal() || right.is_literal() {
                     Err(JSONPathError::syntax(
                         String::from("filter expression literals must be compared"),
-                        left.index,
+                        left.span,
                     ))
                 } else {
                     Ok(FilterExpression::new(
-                        left.index,
+                        left.span,
                         FilterExpressionType::Logical {
                             left: Box::new(left),
                             operator: LogicalOperator::Or,
@@ -503,10 +503,10 @@ impl Parser {
                 }
             }
             Eq => {
-                self.assert_comparable(&left, left.index)?;
-                self.assert_comparable(&right, right.index)?;
+                self.assert_comparable(&left, left.span)?;
+                self.assert_comparable(&right, right.span)?;
                 Ok(FilterExpression::new(
-                    left.index,
+                    left.span,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Eq,
@@ -515,10 +515,10 @@ impl Parser {
                 ))
             }
             Ge => {
-                self.assert_comparable(&left, left.index)?;
-                self.assert_comparable(&right, right.index)?;
+                self.assert_comparable(&left, left.span)?;
+                self.assert_comparable(&right, right.span)?;
                 Ok(FilterExpression::new(
-                    left.index,
+                    left.span,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Ge,
@@ -527,10 +527,10 @@ impl Parser {
                 ))
             }
             Gt => {
-                self.assert_comparable(&left, left.index)?;
-                self.assert_comparable(&right, right.index)?;
+                self.assert_comparable(&left, left.span)?;
+                self.assert_comparable(&right, right.span)?;
                 Ok(FilterExpression::new(
-                    left.index,
+                    left.span,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Gt,
@@ -539,10 +539,10 @@ impl Parser {
                 ))
             }
             Le => {
-                self.assert_comparable(&left, left.index)?;
-                self.assert_comparable(&right, right.index)?;
+                self.assert_comparable(&left, left.span)?;
+                self.assert_comparable(&right, right.span)?;
                 Ok(FilterExpression::new(
-                    left.index,
+                    left.span,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Le,
@@ -551,10 +551,10 @@ impl Parser {
                 ))
             }
             Lt => {
-                self.assert_comparable(&left, left.index)?;
-                self.assert_comparable(&right, right.index)?;
+                self.assert_comparable(&left, left.span)?;
+                self.assert_comparable(&right, right.span)?;
                 Ok(FilterExpression::new(
-                    left.index,
+                    left.span,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Lt,
@@ -563,10 +563,10 @@ impl Parser {
                 ))
             }
             Ne => {
-                self.assert_comparable(&left, left.index)?;
-                self.assert_comparable(&right, right.index)?;
+                self.assert_comparable(&left, left.span)?;
+                self.assert_comparable(&right, right.span)?;
                 Ok(FilterExpression::new(
-                    left.index,
+                    left.span,
                     FilterExpressionType::Comparison {
                         left: Box::new(left),
                         operator: ComparisonOperator::Ne,
@@ -576,7 +576,7 @@ impl Parser {
             }
             _ => Err(JSONPathError::syntax(
                 format!("unexpected infix operator {}", op_token.kind),
-                op_token.index,
+                op_token.span,
             )),
         }
     }
@@ -597,17 +597,17 @@ impl Parser {
                 } => expr = self.parse_infix_expression(it, expr)?,
                 Token {
                     kind: Eoq | RBracket,
-                    ref index,
+                    span: ref index,
                 } => {
                     return Err(JSONPathError::syntax(
                         String::from("unbalanced parentheses"),
                         *index,
                     ));
                 }
-                Token { kind, index } => {
+                Token { kind, span } => {
                     return Err(JSONPathError::syntax(
                         format!("expected an expression, found {}", kind),
-                        *index,
+                        *span,
                     ));
                 }
             }
@@ -630,32 +630,32 @@ impl Parser {
         match it.peek() {
             Token {
                 kind: DoubleQuoteString { value },
-                index,
+                span,
             } => {
-                let value = unescape_string(value, index)?;
+                let value = unescape_string(value, span)?;
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token.index,
+                    token.span,
                     FilterExpressionType::String { value },
                 ))
             }
             Token { kind: False, .. } => {
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token.index,
+                    token.span,
                     FilterExpressionType::False {},
                 ))
             }
             Token {
                 kind: Float { ref value },
-                index,
+                span,
             } => {
                 let f = value.parse::<f64>().map_err(|_| {
-                    JSONPathError::syntax(String::from("invalid float literal"), *index)
+                    JSONPathError::syntax(String::from("invalid float literal"), *span)
                 })?;
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token.index,
+                    token.span,
                     FilterExpressionType::Float { value: f },
                 ))
             }
@@ -665,22 +665,22 @@ impl Parser {
             } => self.parse_function_call(it),
             Token {
                 kind: Int { value },
-                index,
+                span,
             } => {
                 let i = value.parse::<f64>().map_err(|_| {
-                    JSONPathError::syntax(String::from("invalid integer literal"), *index)
+                    JSONPathError::syntax(String::from("invalid integer literal"), *span)
                 })? as i64;
 
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token.index,
+                    token.span,
                     FilterExpressionType::Int { value: i },
                 ))
             }
             Token { kind: Null, .. } => {
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token.index,
+                    token.span,
                     FilterExpressionType::Null {},
                 ))
             }
@@ -688,7 +688,7 @@ impl Parser {
                 let token = it.next();
                 let segments = self.parse_segments(it)?;
                 Ok(FilterExpression::new(
-                    token.index,
+                    token.span,
                     FilterExpressionType::RootQuery {
                         query: Box::new(Query { segments }),
                     },
@@ -698,7 +698,7 @@ impl Parser {
                 let token = it.next();
                 let segments = self.parse_segments(it)?;
                 Ok(FilterExpression::new(
-                    token.index,
+                    token.span,
                     FilterExpressionType::RelativeQuery {
                         query: Box::new(Query { segments }),
                     },
@@ -706,27 +706,27 @@ impl Parser {
             }
             Token {
                 kind: SingleQuoteString { value },
-                index,
+                span,
             } => {
-                let value = unescape_string(&value.replace("\\'", "'"), index)?;
+                let value = unescape_string(&value.replace("\\'", "'"), span)?;
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token.index,
+                    token.span,
                     FilterExpressionType::String { value },
                 ))
             }
             Token { kind: True, .. } => {
                 let token = it.next();
                 Ok(FilterExpression::new(
-                    token.index,
+                    token.span,
                     FilterExpressionType::True {},
                 ))
             }
             Token { kind: LParen, .. } => self.parse_grouped_expression(it),
             Token { kind: Not, .. } => self.parse_not_expression(it),
-            Token { kind, index } => Err(JSONPathError::syntax(
+            Token { kind, span } => Err(JSONPathError::syntax(
                 format!("expected a filter expression, found {}", kind),
-                *index,
+                *span,
             )),
         }
     }
@@ -767,7 +767,7 @@ impl Parser {
             let function_name = name.to_string();
             self.assert_well_typed(&function_name, &arguments, &token)?;
             Ok(FilterExpression::new(
-                token.index,
+                token.span,
                 FilterExpressionType::Function {
                     name: function_name,
                     args: arguments,
@@ -776,7 +776,7 @@ impl Parser {
         } else {
             Err(JSONPathError::syntax(
                 format!("unexpected function argument token {}", token.kind),
-                token.index,
+                token.span,
             ))
         }
     }
@@ -816,7 +816,7 @@ impl Parser {
     fn assert_comparable(
         &self,
         expr: &FilterExpression,
-        index: usize,
+        span: (usize, usize),
     ) -> Result<(), JSONPathError> {
         match &expr.kind {
             FilterExpressionType::RelativeQuery { query }
@@ -824,7 +824,7 @@ impl Parser {
                 if !query.is_singular() {
                     Err(JSONPathError::typ(
                         String::from("non-singular query is not comparable"),
-                        index,
+                        span,
                     ))
                 } else {
                     Ok(())
@@ -840,7 +840,7 @@ impl Parser {
                 } else {
                     Err(JSONPathError::typ(
                         format!("result of {}() is not comparable", name),
-                        index,
+                        span,
                     ))
                 }
             }
@@ -855,7 +855,7 @@ impl Parser {
         token: &Token,
     ) -> Result<(), JSONPathError> {
         let signature = self.functions.get(func_name).ok_or_else(|| {
-            JSONPathError::name(format!("unknown function '{}'", func_name), token.index)
+            JSONPathError::name(format!("unknown function '{}'", func_name), token.span)
         })?;
 
         // correct number of arguments?
@@ -872,7 +872,7 @@ impl Parser {
                     },
                     args.len()
                 ),
-                token.index,
+                token.span,
             ));
         }
 
@@ -888,7 +888,7 @@ impl Parser {
                                 idx + 1,
                                 func_name
                             ),
-                            token.index,
+                            token.span,
                         ));
                     }
                 }
@@ -909,7 +909,7 @@ impl Parser {
                                 idx + 1,
                                 func_name
                             ),
-                            token.index,
+                            token.span,
                         ));
                     }
                 }
@@ -921,7 +921,7 @@ impl Parser {
                                 idx + 1,
                                 func_name
                             ),
-                            token.index,
+                            token.span,
                         ));
                     }
                 }
@@ -997,44 +997,48 @@ impl Parser {
         false
     }
 
-    fn parse_i_json_int(&self, value: &str, token_index: usize) -> Result<i64, JSONPathError> {
+    fn parse_i_json_int(
+        &self,
+        value: &str,
+        token_span: (usize, usize),
+    ) -> Result<i64, JSONPathError> {
         if value.len() > 1 && (value.starts_with('0') || value.starts_with("-0")) {
             return Err(JSONPathError::syntax(
                 format!("invalid index '{}'", value),
-                token_index,
+                token_span,
             ));
         }
 
-        let index = value.parse::<i64>().map_err(|_| {
-            JSONPathError::syntax(format!("invalid index '{}'", value), token_index)
-        })?;
+        let i = value
+            .parse::<i64>()
+            .map_err(|_| JSONPathError::syntax(format!("invalid index '{}'", value), token_span))?;
 
-        if !self.index_range.contains(&index) {
+        if !self.index_range.contains(&i) {
             return Err(JSONPathError::syntax(
                 format!("index out of range '{}'", value),
-                token_index,
+                token_span,
             ));
         }
 
-        Ok(index)
+        Ok(i)
     }
 }
 
-fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathError> {
+fn unescape_string(value: &str, token_span: &(usize, usize)) -> Result<String, JSONPathError> {
     let chars = value.chars().collect::<Vec<char>>();
     let length = chars.len();
     let mut rv = String::new();
     let mut index: usize = 0;
 
     while index < length {
-        let start_index = token_index + index; // for error reporting
+        let start_index = token_span.0 + index; // for error reporting
 
         match chars[index] {
             '\\' => {
                 if index + 1 >= length {
                     return Err(JSONPathError::syntax(
                         String::from("invalid escape"),
-                        start_index,
+                        (start_index, index + 1),
                     ));
                 }
 
@@ -1054,7 +1058,7 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                         if index + 4 >= length {
                             return Err(JSONPathError::syntax(
                                 String::from("invalid \\uXXXX escape"),
-                                start_index,
+                                (start_index, length),
                             ));
                         }
 
@@ -1069,7 +1073,7 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                         let mut codepoint = u32::from_str_radix(&digits, 16).map_err(|_| {
                             JSONPathError::syntax(
                                 String::from("invalid \\uXXXX escape"),
-                                start_index,
+                                (start_index, index + 4),
                             )
                         })?;
 
@@ -1079,7 +1083,7 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                             if index + 9 >= length {
                                 return Err(JSONPathError::syntax(
                                     String::from("invalid \\uXXXX escape"),
-                                    start_index,
+                                    (start_index, length),
                                 ));
                             }
 
@@ -1092,7 +1096,7 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                             let low_surrogate = u32::from_str_radix(digits, 16).map_err(|_| {
                                 JSONPathError::syntax(
                                     String::from("invalid \\uXXXX escape"),
-                                    start_index,
+                                    (start_index, index + 10),
                                 )
                             })?;
 
@@ -1105,14 +1109,14 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                         let unescaped = char::from_u32(codepoint).ok_or_else(|| {
                             JSONPathError::syntax(
                                 String::from("invalid \\uXXXX escape"),
-                                start_index,
+                                (start_index, index + 3),
                             )
                         })?;
 
                         if unescaped as u32 <= 0x1F {
                             return Err(JSONPathError::syntax(
                                 String::from("invalid character"),
-                                start_index,
+                                (start_index, start_index + 1),
                             ));
                         }
 
@@ -1122,7 +1126,7 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                     _ => {
                         return Err(JSONPathError::syntax(
                             String::from("invalid escape"),
-                            start_index,
+                            (start_index, index + 1),
                         ));
                     }
                 }
@@ -1131,7 +1135,7 @@ fn unescape_string(value: &str, token_index: &usize) -> Result<String, JSONPathE
                 if c as u32 <= 0x1F {
                     return Err(JSONPathError::syntax(
                         String::from("invalid character"),
-                        start_index,
+                        (start_index, index + 1),
                     ));
                 }
                 rv.push(c);

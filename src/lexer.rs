@@ -75,7 +75,7 @@ impl<'q> Lexer<'q> {
     }
 
     fn emit(&mut self, t: TokenType) {
-        self.tokens.push(Token::new(t, self.start));
+        self.tokens.push(Token::new(t, self.start, self.pos));
         self.start = self.pos;
     }
 
@@ -164,6 +164,7 @@ impl<'q> Lexer<'q> {
             TokenType::Error {
                 msg: msg.into_boxed_str(),
             },
+            self.start,
             self.pos,
         ));
         State::Error
@@ -182,9 +183,9 @@ pub fn lex(query: &str) -> Result<Vec<Token>, JSONPathError> {
     match tokens.last() {
         Some(Token {
             kind: TokenType::Error { msg },
-            index,
+            span,
             ..
-        }) => Err(JSONPathError::syntax((*msg).to_string(), *index)),
+        }) => Err(JSONPathError::syntax((*msg).to_string(), *span)),
         _ => Ok(tokens),
     }
 }
@@ -194,7 +195,7 @@ fn lex_root(l: &mut Lexer) -> State {
         l.emit(TokenType::Root);
         State::LexSegment
     } else {
-        let msg = format!("expected '$', found '{}'", l.peek());
+        let msg = format!("expected '$', found '{}'", l.next().unwrap_or(EOQ));
         l.error(msg)
     }
 }
@@ -223,7 +224,7 @@ fn lex_segment(l: &mut Lexer) -> State {
     } else {
         let msg = format!(
             "expected '.', '..' or a bracketed selection, found '{}'",
-            l.peek()
+            l.next().unwrap_or(EOQ)
         );
         l.error(msg)
     }
@@ -251,7 +252,7 @@ fn lex_descendant_segment(l: &mut Lexer) -> State {
 fn lex_shorthand_selector(l: &mut Lexer) -> State {
     l.ignore(); // ignore dot
 
-    if l.ignore_whitespace() {
+    if l.accept_run(is_whitespace_char) {
         return l.error(String::from("unexpected whitespace after dot"));
     }
 
@@ -265,7 +266,10 @@ fn lex_shorthand_selector(l: &mut Lexer) -> State {
         });
         State::LexSegment
     } else {
-        let msg = format!("unexpected shorthand selector '{}'", l.peek());
+        let msg = format!(
+            "unexpected shorthand selector '{}'",
+            l.next().unwrap_or(EOQ)
+        );
         l.error(msg)
     }
 }
@@ -651,20 +655,22 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
                 Token::new(
                     TokenType::Name {
                         value: "bar".to_string().into_boxed_str()
                     },
-                    6
+                    6,
+                    9
                 ),
-                Token::new(TokenType::Eoq, 9),
+                Token::new(TokenType::Eoq, 9, 9),
             ]
         )
     }
@@ -676,24 +682,26 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
                 Token::new(
                     TokenType::SingleQuoteString {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    3
+                    3,
+                    6
                 ),
-                Token::new(TokenType::RBracket, 7),
-                Token::new(TokenType::LBracket, 8),
+                Token::new(TokenType::RBracket, 7, 8),
+                Token::new(TokenType::LBracket, 8, 9),
                 Token::new(
                     TokenType::SingleQuoteString {
                         value: "bar".to_string().into_boxed_str()
                     },
-                    10
+                    10,
+                    13
                 ),
-                Token::new(TokenType::RBracket, 14),
-                Token::new(TokenType::Eoq, 15),
+                Token::new(TokenType::RBracket, 14, 15),
+                Token::new(TokenType::Eoq, 15, 15),
             ]
         )
     }
@@ -705,22 +713,24 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5,
                 ),
-                Token::new(TokenType::LBracket, 5),
+                Token::new(TokenType::LBracket, 5, 6),
                 Token::new(
                     TokenType::Index {
                         value: "1".to_string().into_boxed_str()
                     },
-                    6
+                    6,
+                    7
                 ),
-                Token::new(TokenType::RBracket, 7),
-                Token::new(TokenType::Eoq, 8),
+                Token::new(TokenType::RBracket, 7, 8),
+                Token::new(TokenType::Eoq, 8, 8),
             ]
         )
     }
@@ -732,22 +742,24 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
+                Token::new(TokenType::LBracket, 5, 6),
                 Token::new(
                     TokenType::Index {
                         value: "-1".to_string().into_boxed_str()
                     },
-                    6
+                    6,
+                    8
                 ),
-                Token::new(TokenType::RBracket, 8),
-                Token::new(TokenType::Eoq, 9),
+                Token::new(TokenType::RBracket, 8, 9),
+                Token::new(TokenType::Eoq, 9, 9),
             ]
         )
     }
@@ -759,21 +771,23 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
+                Token::new(TokenType::LBracket, 5, 6),
                 Token::new(
                     TokenType::Error {
                         msg: "expected a digit after '-', found ']'"
                             .to_string()
                             .into_boxed_str()
                     },
-                    7,
+                    6,
+                    7
                 ),
             ]
         )
@@ -790,6 +804,7 @@ mod tests {
                     msg: "expected '$', found 'f'".to_string().into_boxed_str()
                 },
                 0,
+                1
             ),]
         )
     }
@@ -801,7 +816,7 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Error {
                         msg: "expected '.', '..' or a bracketed selection, found 'f'"
@@ -809,6 +824,7 @@ mod tests {
                             .into_boxed_str()
                     },
                     1,
+                    2
                 ),
             ]
         )
@@ -821,20 +837,22 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    3
+                    3,
+                    6
                 ),
                 Token::new(
                     TokenType::Name {
                         value: "bar".to_string().into_boxed_str()
                     },
-                    7
+                    7,
+                    10
                 ),
-                Token::new(TokenType::Eoq, 10),
+                Token::new(TokenType::Eoq, 10, 10),
             ]
         )
     }
@@ -846,14 +864,15 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Error {
                         msg: "unexpected whitespace after dot"
                             .to_string()
                             .into_boxed_str()
                     },
-                    3,
+                    2,
+                    3
                 ),
             ]
         )
@@ -866,20 +885,22 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
                 Token::new(
                     TokenType::Name {
                         value: "bar".to_string().into_boxed_str()
                     },
-                    7
+                    7,
+                    10
                 ),
-                Token::new(TokenType::Eoq, 10),
+                Token::new(TokenType::Eoq, 10, 10),
             ]
         )
     }
@@ -891,15 +912,16 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::Wild, 6),
-                Token::new(TokenType::Eoq, 7),
+                Token::new(TokenType::Wild, 6, 7),
+                Token::new(TokenType::Eoq, 7, 7),
             ]
         )
     }
@@ -911,15 +933,16 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::DoubleDot, 1),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::DoubleDot, 1, 3),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    3
+                    3,
+                    6
                 ),
-                Token::new(TokenType::Eoq, 6),
+                Token::new(TokenType::Eoq, 6, 6),
             ]
         )
     }
@@ -931,17 +954,18 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::DoubleDot, 1),
-                Token::new(TokenType::LBracket, 3),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::DoubleDot, 1, 3),
+                Token::new(TokenType::LBracket, 3, 4),
                 Token::new(
                     TokenType::SingleQuoteString {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    5
+                    5,
+                    8
                 ),
-                Token::new(TokenType::RBracket, 9),
-                Token::new(TokenType::Eoq, 10),
+                Token::new(TokenType::RBracket, 9, 10),
+                Token::new(TokenType::Eoq, 10, 10),
             ]
         )
     }
@@ -953,10 +977,10 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::DoubleDot, 1),
-                Token::new(TokenType::Wild, 3),
-                Token::new(TokenType::Eoq, 4),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::DoubleDot, 1, 3),
+                Token::new(TokenType::Wild, 3, 4),
+                Token::new(TokenType::Eoq, 4, 4),
             ]
         )
     }
@@ -968,8 +992,8 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::DoubleDot, 1),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::DoubleDot, 1, 3),
                 Token::new(
                     TokenType::Error {
                         msg: "unexpected descendant selection token '.'"
@@ -977,6 +1001,7 @@ mod tests {
                             .into_boxed_str()
                     },
                     3,
+                    3
                 ),
             ]
         )
@@ -989,8 +1014,8 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::DoubleDot, 1),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::DoubleDot, 1, 3),
                 Token::new(
                     TokenType::Error {
                         msg: "unexpected descendant selection token '.'"
@@ -998,6 +1023,7 @@ mod tests {
                             .into_boxed_str()
                     },
                     3,
+                    3
                 ),
             ]
         )
@@ -1010,22 +1036,24 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
+                Token::new(TokenType::LBracket, 5, 6),
                 Token::new(
                     TokenType::DoubleQuoteString {
                         value: "bar".to_string().into_boxed_str()
                     },
-                    7
+                    7,
+                    10
                 ),
-                Token::new(TokenType::RBracket, 11),
-                Token::new(TokenType::Eoq, 12),
+                Token::new(TokenType::RBracket, 11, 12),
+                Token::new(TokenType::Eoq, 12, 12),
             ]
         )
     }
@@ -1037,22 +1065,24 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
+                Token::new(TokenType::LBracket, 5, 6),
                 Token::new(
                     TokenType::SingleQuoteString {
                         value: "bar".to_string().into_boxed_str()
                     },
                     7,
+                    10
                 ),
-                Token::new(TokenType::RBracket, 11),
-                Token::new(TokenType::Eoq, 12),
+                Token::new(TokenType::RBracket, 11, 12),
+                Token::new(TokenType::Eoq, 12, 12),
             ]
         )
     }
@@ -1064,31 +1094,34 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
+                Token::new(TokenType::LBracket, 5, 6),
                 Token::new(
                     TokenType::SingleQuoteString {
                         value: "bar".to_string().into_boxed_str()
                     },
                     7,
+                    10
                 ),
-                Token::new(TokenType::Comma, 11),
+                Token::new(TokenType::Comma, 11, 12),
                 Token::new(
                     TokenType::Index {
                         value: "123".to_string().into_boxed_str()
                     },
                     13,
+                    16
                 ),
-                Token::new(TokenType::Comma, 16),
-                Token::new(TokenType::Wild, 18),
-                Token::new(TokenType::RBracket, 19),
-                Token::new(TokenType::Eoq, 20),
+                Token::new(TokenType::Comma, 16, 17),
+                Token::new(TokenType::Wild, 18, 19),
+                Token::new(TokenType::RBracket, 19, 20),
+                Token::new(TokenType::Eoq, 20, 20),
             ]
         )
     }
@@ -1100,29 +1133,32 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
+                Token::new(TokenType::LBracket, 5, 6),
                 Token::new(
                     TokenType::Index {
                         value: "1".to_string().into_boxed_str()
                     },
-                    6
+                    6,
+                    7
                 ),
-                Token::new(TokenType::Colon, 7),
+                Token::new(TokenType::Colon, 7, 8),
                 Token::new(
                     TokenType::Index {
                         value: "3".to_string().into_boxed_str()
                     },
-                    8
+                    8,
+                    9
                 ),
-                Token::new(TokenType::RBracket, 9),
-                Token::new(TokenType::Eoq, 10),
+                Token::new(TokenType::RBracket, 9, 10),
+                Token::new(TokenType::Eoq, 10, 10),
             ]
         )
     }
@@ -1134,24 +1170,26 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
-                Token::new(TokenType::Filter, 6),
-                Token::new(TokenType::Current, 7),
+                Token::new(TokenType::LBracket, 5, 6),
+                Token::new(TokenType::Filter, 6, 7),
+                Token::new(TokenType::Current, 7, 8),
                 Token::new(
                     TokenType::Name {
                         value: "bar".to_string().into_boxed_str()
                     },
-                    9
+                    9,
+                    12
                 ),
-                Token::new(TokenType::RBracket, 12),
-                Token::new(TokenType::Eoq, 13),
+                Token::new(TokenType::RBracket, 12, 13),
+                Token::new(TokenType::Eoq, 13, 13),
             ]
         )
     }
@@ -1163,31 +1201,34 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
-                Token::new(TokenType::Filter, 6),
-                Token::new(TokenType::Current, 7),
+                Token::new(TokenType::LBracket, 5, 6),
+                Token::new(TokenType::Filter, 6, 7),
+                Token::new(TokenType::Current, 7, 8),
                 Token::new(
                     TokenType::Name {
                         value: "bar".to_string().into_boxed_str()
                     },
-                    9
+                    9,
+                    12
                 ),
-                Token::new(TokenType::Eq, 13),
+                Token::new(TokenType::Eq, 13, 15),
                 Token::new(
                     TokenType::SingleQuoteString {
                         value: "baz".to_string().into_boxed_str()
                     },
-                    17
+                    17,
+                    20
                 ),
-                Token::new(TokenType::RBracket, 21),
-                Token::new(TokenType::Eoq, 22),
+                Token::new(TokenType::RBracket, 21, 22),
+                Token::new(TokenType::Eoq, 22, 22),
             ]
         )
     }
@@ -1199,31 +1240,34 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
-                Token::new(TokenType::Filter, 6),
-                Token::new(TokenType::Current, 7),
+                Token::new(TokenType::LBracket, 5, 6),
+                Token::new(TokenType::Filter, 6, 7),
+                Token::new(TokenType::Current, 7, 8),
                 Token::new(
                     TokenType::Name {
                         value: "bar".to_string().into_boxed_str()
                     },
-                    9
+                    9,
+                    12
                 ),
-                Token::new(TokenType::Eq, 13),
+                Token::new(TokenType::Eq, 13, 15),
                 Token::new(
                     TokenType::DoubleQuoteString {
                         value: "baz".to_string().into_boxed_str()
                     },
-                    17
+                    17,
+                    20
                 ),
-                Token::new(TokenType::RBracket, 21),
-                Token::new(TokenType::Eoq, 22),
+                Token::new(TokenType::RBracket, 21, 22),
+                Token::new(TokenType::Eoq, 22, 22),
             ]
         )
     }
@@ -1235,26 +1279,28 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
-                Token::new(TokenType::Filter, 6),
-                Token::new(TokenType::LParen, 7),
-                Token::new(TokenType::Current, 8),
+                Token::new(TokenType::LBracket, 5, 6),
+                Token::new(TokenType::Filter, 6, 7),
+                Token::new(TokenType::LParen, 7, 8),
+                Token::new(TokenType::Current, 8, 9),
                 Token::new(
                     TokenType::Name {
                         value: "bar".to_string().into_boxed_str()
                     },
-                    10
+                    10,
+                    13
                 ),
-                Token::new(TokenType::RParen, 13),
-                Token::new(TokenType::RBracket, 14),
-                Token::new(TokenType::Eoq, 15),
+                Token::new(TokenType::RParen, 13, 14),
+                Token::new(TokenType::RBracket, 14, 15),
+                Token::new(TokenType::Eoq, 15, 15),
             ]
         )
     }
@@ -1266,33 +1312,36 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    2
+                    2,
+                    5
                 ),
-                Token::new(TokenType::LBracket, 5),
-                Token::new(TokenType::Filter, 6),
-                Token::new(TokenType::Current, 7),
+                Token::new(TokenType::LBracket, 5, 6),
+                Token::new(TokenType::Filter, 6, 7),
+                Token::new(TokenType::Current, 7, 8),
                 Token::new(
                     TokenType::Name {
                         value: "bar".to_string().into_boxed_str()
                     },
-                    9
+                    9,
+                    12
                 ),
-                Token::new(TokenType::Comma, 12),
-                Token::new(TokenType::Filter, 14),
-                Token::new(TokenType::Current, 15),
+                Token::new(TokenType::Comma, 12, 13),
+                Token::new(TokenType::Filter, 14, 15),
+                Token::new(TokenType::Current, 15, 16),
                 Token::new(
                     TokenType::Name {
                         value: "baz".to_string().into_boxed_str()
                     },
-                    17
+                    17,
+                    20
                 ),
-                Token::new(TokenType::RBracket, 20),
-                Token::new(TokenType::Eoq, 21),
+                Token::new(TokenType::RBracket, 20, 21),
+                Token::new(TokenType::Eoq, 21, 21),
             ]
         )
     }
@@ -1304,32 +1353,35 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
                 Token::new(
                     TokenType::Function {
                         name: "count".to_string().into_boxed_str()
                     },
-                    3
+                    3,
+                    8,
                 ),
-                Token::new(TokenType::Current, 9),
+                Token::new(TokenType::Current, 9, 10),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    11
+                    11,
+                    14
                 ),
-                Token::new(TokenType::RParen, 14),
-                Token::new(TokenType::Gt, 15),
+                Token::new(TokenType::RParen, 14, 15),
+                Token::new(TokenType::Gt, 15, 16),
                 Token::new(
                     TokenType::Int {
                         value: "2".to_string().into_boxed_str()
                     },
-                    16
+                    16,
+                    17
                 ),
-                Token::new(TokenType::RBracket, 17),
-                Token::new(TokenType::Eoq, 18),
+                Token::new(TokenType::RBracket, 17, 18),
+                Token::new(TokenType::Eoq, 18, 18),
             ]
         )
     }
@@ -1341,39 +1393,43 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
                 Token::new(
                     TokenType::Function {
                         name: "count".to_string().into_boxed_str()
                     },
-                    3
+                    3,
+                    8
                 ),
-                Token::new(TokenType::Current, 9),
+                Token::new(TokenType::Current, 9, 10),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    11
+                    11,
+                    14
                 ),
-                Token::new(TokenType::Comma, 14),
+                Token::new(TokenType::Comma, 14, 15),
                 Token::new(
                     TokenType::Int {
                         value: "1".to_string().into_boxed_str()
                     },
-                    16
+                    16,
+                    17
                 ),
-                Token::new(TokenType::RParen, 17),
-                Token::new(TokenType::Gt, 18),
+                Token::new(TokenType::RParen, 17, 18),
+                Token::new(TokenType::Gt, 18, 19),
                 Token::new(
                     TokenType::Int {
                         value: "2".to_string().into_boxed_str()
                     },
-                    19
+                    19,
+                    20
                 ),
-                Token::new(TokenType::RBracket, 20),
-                Token::new(TokenType::Eoq, 21),
+                Token::new(TokenType::RBracket, 20, 21),
+                Token::new(TokenType::Eoq, 21, 21),
             ]
         )
     }
@@ -1385,34 +1441,37 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
-                Token::new(TokenType::LParen, 3),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
+                Token::new(TokenType::LParen, 3, 4),
                 Token::new(
                     TokenType::Function {
                         name: "count".to_string().into_boxed_str()
                     },
-                    4
+                    4,
+                    9
                 ),
-                Token::new(TokenType::Current, 10),
+                Token::new(TokenType::Current, 10, 11),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    12
+                    12,
+                    15
                 ),
-                Token::new(TokenType::RParen, 15),
-                Token::new(TokenType::Gt, 16),
+                Token::new(TokenType::RParen, 15, 16),
+                Token::new(TokenType::Gt, 16, 17),
                 Token::new(
                     TokenType::Int {
                         value: "2".to_string().into_boxed_str()
                     },
-                    17
+                    17,
+                    18
                 ),
-                Token::new(TokenType::RParen, 18),
-                Token::new(TokenType::RBracket, 19),
-                Token::new(TokenType::Eoq, 20),
+                Token::new(TokenType::RParen, 18, 19),
+                Token::new(TokenType::RBracket, 19, 20),
+                Token::new(TokenType::Eoq, 20, 20),
             ]
         )
     }
@@ -1424,43 +1483,47 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
-                Token::new(TokenType::LParen, 3),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
+                Token::new(TokenType::LParen, 3, 4),
                 Token::new(
                     TokenType::Function {
                         name: "count".to_string().into_boxed_str()
                     },
-                    4
+                    4,
+                    9
                 ),
-                Token::new(TokenType::LParen, 10),
-                Token::new(TokenType::Current, 11),
+                Token::new(TokenType::LParen, 10, 11),
+                Token::new(TokenType::Current, 11, 12),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    13
+                    13,
+                    16
                 ),
-                Token::new(TokenType::RParen, 16),
-                Token::new(TokenType::Comma, 17),
+                Token::new(TokenType::RParen, 16, 17),
+                Token::new(TokenType::Comma, 17, 18),
                 Token::new(
                     TokenType::Int {
                         value: "1".to_string().into_boxed_str()
                     },
-                    18
+                    18,
+                    19
                 ),
-                Token::new(TokenType::RParen, 19),
-                Token::new(TokenType::Gt, 20),
+                Token::new(TokenType::RParen, 19, 20),
+                Token::new(TokenType::Gt, 20, 21),
                 Token::new(
                     TokenType::Int {
                         value: "2".to_string().into_boxed_str()
                     },
-                    21
+                    21,
+                    22
                 ),
-                Token::new(TokenType::RParen, 22),
-                Token::new(TokenType::RBracket, 23),
-                Token::new(TokenType::Eoq, 24),
+                Token::new(TokenType::RParen, 22, 23),
+                Token::new(TokenType::RBracket, 23, 24),
+                Token::new(TokenType::Eoq, 24, 24),
             ]
         )
     }
@@ -1472,23 +1535,24 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
-                Token::new(TokenType::Current, 3),
-                Token::new(TokenType::LBracket, 4),
-                Token::new(TokenType::Filter, 5),
-                Token::new(TokenType::Current, 6),
-                Token::new(TokenType::Gt, 7),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
+                Token::new(TokenType::Current, 3, 4),
+                Token::new(TokenType::LBracket, 4, 5),
+                Token::new(TokenType::Filter, 5, 6),
+                Token::new(TokenType::Current, 6, 7),
+                Token::new(TokenType::Gt, 7, 8),
                 Token::new(
                     TokenType::Int {
                         value: "1".to_string().into_boxed_str()
                     },
-                    8
+                    8,
+                    9
                 ),
-                Token::new(TokenType::RBracket, 9),
-                Token::new(TokenType::RBracket, 10),
-                Token::new(TokenType::Eoq, 11),
+                Token::new(TokenType::RBracket, 9, 10),
+                Token::new(TokenType::RBracket, 10, 11),
+                Token::new(TokenType::Eoq, 11, 11),
             ]
         )
     }
@@ -1500,31 +1564,33 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
-                Token::new(TokenType::Current, 3),
-                Token::new(TokenType::LBracket, 4),
-                Token::new(TokenType::Filter, 5),
-                Token::new(TokenType::Current, 6),
-                Token::new(TokenType::LBracket, 7),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
+                Token::new(TokenType::Current, 3, 4),
+                Token::new(TokenType::LBracket, 4, 5),
+                Token::new(TokenType::Filter, 5, 6),
+                Token::new(TokenType::Current, 6, 7),
+                Token::new(TokenType::LBracket, 7, 8),
                 Token::new(
                     TokenType::Index {
                         value: "1".to_string().into_boxed_str()
                     },
-                    8
+                    8,
+                    9
                 ),
-                Token::new(TokenType::RBracket, 9),
-                Token::new(TokenType::Gt, 10),
+                Token::new(TokenType::RBracket, 9, 10),
+                Token::new(TokenType::Gt, 10, 11),
                 Token::new(
                     TokenType::Int {
                         value: "1".to_string().into_boxed_str()
                     },
-                    11
+                    11,
+                    12
                 ),
-                Token::new(TokenType::RBracket, 12),
-                Token::new(TokenType::RBracket, 13),
-                Token::new(TokenType::Eoq, 14),
+                Token::new(TokenType::RBracket, 12, 13),
+                Token::new(TokenType::RBracket, 13, 14),
+                Token::new(TokenType::Eoq, 14, 14),
             ]
         )
     }
@@ -1536,18 +1602,19 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
                 Token::new(
                     TokenType::Function {
                         name: "foo".to_string().into_boxed_str()
                     },
-                    3
+                    3,
+                    6
                 ),
-                Token::new(TokenType::RParen, 7),
-                Token::new(TokenType::RBracket, 8),
-                Token::new(TokenType::Eoq, 9),
+                Token::new(TokenType::RParen, 7, 8),
+                Token::new(TokenType::RBracket, 8, 9),
+                Token::new(TokenType::Eoq, 9, 9),
             ]
         )
     }
@@ -1559,24 +1626,26 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
                 Token::new(
                     TokenType::Function {
                         name: "foo".to_string().into_boxed_str()
                     },
-                    3
+                    3,
+                    6
                 ),
                 Token::new(
                     TokenType::Int {
                         value: "42".to_string().into_boxed_str()
                     },
-                    7
+                    7,
+                    9
                 ),
-                Token::new(TokenType::RParen, 9),
-                Token::new(TokenType::RBracket, 10),
-                Token::new(TokenType::Eoq, 11),
+                Token::new(TokenType::RParen, 9, 10),
+                Token::new(TokenType::RBracket, 10, 11),
+                Token::new(TokenType::Eoq, 11, 11),
             ]
         )
     }
@@ -1588,31 +1657,34 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
                 Token::new(
                     TokenType::Function {
                         name: "foo".to_string().into_boxed_str()
                     },
-                    3
+                    3,
+                    6
                 ),
                 Token::new(
                     TokenType::Int {
                         value: "42".to_string().into_boxed_str()
                     },
-                    7
+                    7,
+                    9
                 ),
-                Token::new(TokenType::Comma, 9),
+                Token::new(TokenType::Comma, 9, 10),
                 Token::new(
                     TokenType::Int {
                         value: "-7".to_string().into_boxed_str()
                     },
-                    11
+                    11,
+                    13
                 ),
-                Token::new(TokenType::RParen, 13),
-                Token::new(TokenType::RBracket, 14),
-                Token::new(TokenType::Eoq, 15),
+                Token::new(TokenType::RParen, 13, 14),
+                Token::new(TokenType::RBracket, 14, 15),
+                Token::new(TokenType::Eoq, 15, 15),
             ]
         )
     }
@@ -1624,14 +1696,14 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
-                Token::new(TokenType::True, 3),
-                Token::new(TokenType::Eq, 7),
-                Token::new(TokenType::False, 9),
-                Token::new(TokenType::RBracket, 14),
-                Token::new(TokenType::Eoq, 15),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
+                Token::new(TokenType::True, 3, 7),
+                Token::new(TokenType::Eq, 7, 9),
+                Token::new(TokenType::False, 9, 14),
+                Token::new(TokenType::RBracket, 14, 15),
+                Token::new(TokenType::Eoq, 15, 15)
             ]
         )
     }
@@ -1643,14 +1715,14 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
-                Token::new(TokenType::True, 3),
-                Token::new(TokenType::And, 8),
-                Token::new(TokenType::False, 11),
-                Token::new(TokenType::RBracket, 16),
-                Token::new(TokenType::Eoq, 17),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
+                Token::new(TokenType::True, 3, 7),
+                Token::new(TokenType::And, 8, 10),
+                Token::new(TokenType::False, 11, 16),
+                Token::new(TokenType::RBracket, 16, 17),
+                Token::new(TokenType::Eoq, 17, 17),
             ]
         )
     }
@@ -1662,25 +1734,27 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
-                Token::new(TokenType::LBracket, 1),
-                Token::new(TokenType::Filter, 2),
-                Token::new(TokenType::Current, 3),
+                Token::new(TokenType::Root, 0, 1),
+                Token::new(TokenType::LBracket, 1, 2),
+                Token::new(TokenType::Filter, 2, 3),
+                Token::new(TokenType::Current, 3, 4),
                 Token::new(
                     TokenType::Name {
                         value: "foo".to_string().into_boxed_str()
                     },
-                    5
+                    5,
+                    8
                 ),
-                Token::new(TokenType::Gt, 9),
+                Token::new(TokenType::Gt, 9, 10),
                 Token::new(
                     TokenType::Float {
                         value: "42.7".to_string().into_boxed_str()
                     },
-                    11
+                    11,
+                    15
                 ),
-                Token::new(TokenType::RBracket, 15),
-                Token::new(TokenType::Eoq, 16),
+                Token::new(TokenType::RBracket, 15, 16),
+                Token::new(TokenType::Eoq, 16, 16),
             ]
         )
     }
@@ -1692,7 +1766,7 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenType::Root, 0),
+                Token::new(TokenType::Root, 0, 1),
                 Token::new(
                     TokenType::Error {
                         msg: "unexpected shorthand selector '5'"
@@ -1700,6 +1774,7 @@ mod tests {
                             .into_boxed_str()
                     },
                     2,
+                    3
                 ),
             ]
         )

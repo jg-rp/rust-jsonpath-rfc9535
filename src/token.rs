@@ -79,15 +79,20 @@ impl fmt::Display for TokenType {
     }
 }
 
+// TODO: span?
+
 /// A JSONPath expression token, as produced by the lexer.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub kind: TokenType,
-    pub index: usize,
+    pub span: (usize, usize),
 }
 
 impl Token {
-    pub fn new(kind: TokenType, index: usize) -> Self {
-        Self { kind, index }
+    pub fn new(kind: TokenType, start: usize, end: usize) -> Self {
+        Self {
+            kind,
+            span: (start, end),
+        }
     }
 }

@@ -4,7 +4,7 @@
 //!
 //!
 pub mod errors;
-mod lexer;
+pub mod lexer;
 pub mod parser;
 pub mod query;
 mod token;

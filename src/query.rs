@@ -68,11 +68,11 @@ impl Query {
 #[derive(Debug)]
 pub enum Segment {
     Child {
-        index: usize,
+        span: (usize, usize),
         selectors: Vec<Selector>,
     },
     Recursive {
-        index: usize,
+        span: (usize, usize),
         selectors: Vec<Selector>,
     },
 }
@@ -109,24 +109,24 @@ impl fmt::Display for Segment {
 #[derive(Debug)]
 pub enum Selector {
     Name {
-        index: usize,
+        span: (usize, usize),
         name: String,
     },
     Index {
-        index: usize,
-        array_index: i64,
+        span: (usize, usize),
+        index: i64,
     },
     Slice {
-        index: usize,
+        span: (usize, usize),
         start: Option<i64>,
         stop: Option<i64>,
         step: Option<i64>,
     },
     Wild {
-        index: usize,
+        span: (usize, usize),
     },
     Filter {
-        index: usize,
+        span: (usize, usize),
         expression: Box<FilterExpression>,
     },
 }
@@ -135,7 +135,9 @@ impl fmt::Display for Selector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Selector::Name { name, .. } => write!(f, "'{name}'"),
-            Selector::Index { array_index, .. } => write!(f, "{array_index}"),
+            Selector::Index {
+                index: array_index, ..
+            } => write!(f, "{array_index}"),
             Selector::Slice {
                 start, stop, step, ..
             } => {
@@ -236,13 +238,13 @@ pub enum FilterExpressionType {
 
 #[derive(Debug)]
 pub struct FilterExpression {
-    pub index: usize,
+    pub span: (usize, usize),
     pub kind: FilterExpressionType,
 }
 
 impl FilterExpression {
-    pub fn new(index: usize, kind: FilterExpressionType) -> Self {
-        FilterExpression { index, kind }
+    pub fn new(span: (usize, usize), kind: FilterExpressionType) -> Self {
+        FilterExpression { span, kind }
     }
 
     pub fn is_literal(&self) -> bool {
