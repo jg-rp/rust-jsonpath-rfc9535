@@ -1,4 +1,4 @@
-use rust_jsonpath::{errors::JSONPathError, query::Query};
+use jsonpath_rfc9535::{errors::JSONPathError, query::Query};
 
 macro_rules! parse_tests {
     ($($name:ident: $value:expr,)*) => {

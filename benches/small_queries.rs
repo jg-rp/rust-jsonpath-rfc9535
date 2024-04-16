@@ -4,7 +4,7 @@ extern crate test;
 
 #[cfg(test)]
 mod tests {
-    use rust_jsonpath::query::Query;
+    use jsonpath_rfc9535::query::Query;
     use test::Bencher;
 
     #[bench]

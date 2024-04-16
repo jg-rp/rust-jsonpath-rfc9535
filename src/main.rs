@@ -1,13 +1,17 @@
-use rust_jsonpath::errors::JSONPathError;
-use rust_jsonpath::Query;
+use jsonpath_rfc9535::{errors::JSONPathError, ExpressionType, Parser};
 
 fn main() -> Result<(), JSONPathError> {
-    // let parser = Parser::new();
-    // let qq = parser.parse("$..some[2]")?;
+    let mut parser = Parser::new();
 
-    let q = Query::standard("$foo")?;
+    parser.add_function(
+        "foo",
+        vec![ExpressionType::Value, ExpressionType::Nodes],
+        ExpressionType::Logical,
+    );
 
-    println!("{:?}", q);
+    let q = parser.parse("$.some[?foo('7', @.thing)][1, 4]")?;
+
+    // println!("{:#?}", q);
     println!("{}", q);
 
     Ok(())

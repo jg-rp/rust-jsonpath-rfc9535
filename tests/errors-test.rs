@@ -1,4 +1,4 @@
-use rust_jsonpath::Query;
+use jsonpath_rfc9535::Query;
 
 mod errors {
     use super::*;

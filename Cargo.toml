@@ -1,5 +1,5 @@
 [package]
-name = "rust-jsonpath"
+name = "jsonpath-rfc9535"
 version = "0.1.0"
 edition = "2021"
 
