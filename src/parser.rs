@@ -855,7 +855,7 @@ impl Parser {
         token: &Token,
     ) -> Result<(), JSONPathError> {
         let signature = self.functions.get(func_name).ok_or_else(|| {
-            JSONPathError::name(format!("unknown function '{}'", func_name), token.span)
+            JSONPathError::name(format!("unknown function `{}`", func_name), token.span)
         })?;
 
         // correct number of arguments?
@@ -1004,18 +1004,18 @@ impl Parser {
     ) -> Result<i64, JSONPathError> {
         if value.len() > 1 && (value.starts_with('0') || value.starts_with("-0")) {
             return Err(JSONPathError::syntax(
-                format!("invalid index '{}'", value),
+                format!("invalid index `{}`", value),
                 token_span,
             ));
         }
 
         let i = value
             .parse::<i64>()
-            .map_err(|_| JSONPathError::syntax(format!("invalid index '{}'", value), token_span))?;
+            .map_err(|_| JSONPathError::syntax(format!("invalid index `{}`", value), token_span))?;
 
         if !self.index_range.contains(&i) {
             return Err(JSONPathError::syntax(
-                format!("index out of range '{}'", value),
+                format!("index out of range `{}`", value),
                 token_span,
             ));
         }

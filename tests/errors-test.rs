@@ -4,7 +4,7 @@ mod errors {
     use super::*;
 
     #[test]
-    #[should_panic(expected = "unknown function 'nosuchthing'")]
+    #[should_panic(expected = "unknown function `nosuchthing`")]
     fn unknown_function() {
         Query::standard("$[?nosuchthing()]").unwrap();
     }
