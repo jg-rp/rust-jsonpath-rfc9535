@@ -1,4 +1,91 @@
-// TODO: docs
+//! Tokenize JSONPath expressions.
+//!
+//! The lexer steps through characters in a JSONPath expression and produces a
+//! sequence of tokens, ready for the parser to process.
+//!
+//! Usually you won't need to deal with the Lexer directly but, if you want do
+//! to do something unusual with raw query tokens, use [`tokenize`] or [`lex`].
+//!
+//! # Examples
+//!
+//! ```
+//! use jsonpath_rfc9535::{errors::JSONPathError, lexer::lex};
+//!
+//! fn main() -> Result<(), JSONPathError> {
+//!     let tokens = lex("$.foo.*")?;
+//!     println!("{:#?}", tokens);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ```text
+//! [
+//!    Token {
+//!        kind: Root,
+//!        span: (
+//!            0,
+//!            1,
+//!        ),
+//!    },
+//!    Token {
+//!        kind: Name {
+//!            value: "foo",
+//!        },
+//!        span: (
+//!            2,
+//!            5,
+//!        ),
+//!    },
+//!    Token {
+//!        kind: Wild,
+//!        span: (
+//!            6,
+//!            7,
+//!        ),
+//!    },
+//!    Token {
+//!        kind: Eoq,
+//!        span: (
+//!            7,
+//!            7,
+//!        ),
+//!    },
+//! ]
+//!```
+//!
+//! Whereas [`lex`] returns a [`Result`], [`tokenize`] returns a [`Vec`],
+//! possibly with the last token having a `kind` of [`TokenType::Error`].
+//!
+//! ```
+//! use jsonpath_rfc9535::lexer::tokenize;
+//!
+//! fn main() {
+//!     let tokens = tokenize("$foo"); // deliberate error
+//!     println!("{:#?}", tokens);
+//! }
+//! ```
+//!
+//! ```text
+//! [
+//!    Token {
+//!        kind: Root,
+//!        span: (
+//!            0,
+//!            1,
+//!        ),
+//!    },
+//!    Token {
+//!        kind: Error {
+//!            msg: "expected '.', '..' or a bracketed selection, found 'f'",
+//!        },
+//!        span: (
+//!            1,
+//!            2,
+//!        ),
+//!    },
+//! ]
+//! ```
+
 use crate::{
     errors::JSONPathError,
     token::{Token, TokenType, EOQ},
@@ -21,7 +108,7 @@ enum State {
     LexInsideDoubleQuotedFilterString,
 }
 
-/// A JSONPath tokenizer, producing a vector of tokens.
+/// A lexer for JSONPath expressions.
 struct Lexer<'q> {
     query: &'q str,
     tokens: Vec<Token>,

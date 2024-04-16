@@ -1,8 +1,18 @@
-use std::fmt::{self, Write};
+//! Structs and enums that make up a JSONPath query syntax tree.
+//!
+//! The types in this module are used by the [`Parser`] to build an abstract
+//! syntax tree for a JSONPath query. We are careful to use terminology from
+//! [RFC 9535] and we model JSONPath segments and selectors explicitly.
+//!
+//! A [`Query`] contains zero or more [`Segment`]s, and each segment contains one
+//! or more [`Selector`]s. When a segment includes a _filter selector_, that
+//! filter selector is a tree of [`FilterExpression`]s.
+//!
+//! [RFC 9535]: https://datatracker.ietf.org/doc/html/rfc9535
 
 use crate::{errors::JSONPathError, parser::Parser};
-
 use lazy_static::lazy_static;
+use std::fmt::{self, Write};
 
 lazy_static! {
     static ref PARSER: Parser = Parser::new();

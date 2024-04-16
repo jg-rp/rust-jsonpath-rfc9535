@@ -1,5 +1,41 @@
-use std::{collections::HashMap, iter::Peekable, ops::RangeInclusive, vec::IntoIter};
-
+//! Parse tokens into a JSONPath expression tree.
+//!
+//! The parser consumes tokens created by the lexer and produces a [`Query`], containing
+//! an abstract syntax tree for a single JSONPath query.
+//!
+//! ```
+//! use jsonpath_rfc9535::{errors::JSONPathError, Parser};
+//!
+//! fn main() -> Result<(), JSONPathError> {
+//!     let parser = Parser::new();
+//!     let q = parser.parse("$.some[?@.thing]")?;
+//!     println!("{:#?}", q);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! New [`Parser`]s are created with the [standard functions] defined by RFC 9535. Use
+//! [`Parser::add_function`] to register additional function extensions.
+//!
+//! ```
+//! use jsonpath_rfc9535::{errors::JSONPathError, ExpressionType, Parser};
+//!
+//! fn main() -> Result<(), JSONPathError> {
+//!     let mut parser = Parser::new();
+//!
+//!     parser.add_function(
+//!         "foo",
+//!         vec![ExpressionType::Value, ExpressionType::Nodes],
+//!         ExpressionType::Logical,
+//!     );
+//!
+//!     let q = parser.parse("$.some[?foo('7', @.thing)][1, 4]")?;
+//!     println!("{:?}", q);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! [standard functions]: https://datatracker.ietf.org/doc/html/rfc9535#name-function-extensions
 use crate::{
     errors::{JSONPathError, JSONPathErrorType},
     lexer::lex,
@@ -9,6 +45,7 @@ use crate::{
     },
     token::{Token, TokenType},
 };
+use std::{collections::HashMap, iter::Peekable, ops::RangeInclusive, vec::IntoIter};
 
 use TokenType::*;
 

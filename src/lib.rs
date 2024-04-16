@@ -73,7 +73,6 @@
 //!     );
 //!
 //!     let q = parser.parse("$.some[?foo('7', @.thing)][1, 4]")?;
-//!
 //!     println!("{:?}", q);
 //!     Ok(())
 //! }
@@ -97,7 +96,7 @@ pub mod errors;
 pub mod lexer;
 pub mod parser;
 pub mod query;
-mod token;
+pub mod token;
 
 pub use errors::JSONPathError;
 pub use errors::JSONPathErrorType;
