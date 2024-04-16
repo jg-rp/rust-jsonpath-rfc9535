@@ -85,8 +85,8 @@ Note that a `Query` is displayed in its canonical form when printed.
 $['some'][?foo("7", @['thing'])][1, 4]
 ```
 
-Without registering a signature for `foo`, we would get a [`JSONPathError`] with
-`kind` set to [`JSONPathErrorType::NameError`].
+Without registering a signature for `foo`, we would get a `JSONPathError` with
+`kind` set to `JSONPathErrorType::NameError`.
 
 ```text
 Error: JSONPathError { kind: NameError, msg: "unknown function `foo`", span: (8, 11) }
