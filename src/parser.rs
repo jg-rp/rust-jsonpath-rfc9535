@@ -14,7 +14,7 @@ use TokenType::*;
 
 const EOF_TOKEN: Token = Token {
     kind: Eoq,
-    span: (0, 1), // TODO: change to usize max?
+    span: (0, 1),
 };
 
 const PRECEDENCE_LOWEST: u8 = 1;
@@ -172,7 +172,7 @@ impl Parser {
                     let token = it.next();
                     let selectors = self.parse_selectors(it)?;
                     segments.push(Segment::Recursive {
-                        span: token.span, // TODO: span whole of segment?
+                        span: token.span,
                         selectors,
                     });
                 }

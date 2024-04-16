@@ -79,8 +79,6 @@ impl fmt::Display for TokenType {
     }
 }
 
-// TODO: span?
-
 /// A JSONPath expression token, as produced by the lexer.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {
