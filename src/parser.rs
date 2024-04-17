@@ -39,10 +39,7 @@
 use crate::{
     errors::{JSONPathError, JSONPathErrorType},
     lexer::lex,
-    query::{
-        ComparisonOperator, FilterExpression, FilterExpressionType, LogicalOperator, Query,
-        Segment, Selector,
-    },
+    query::{ComparisonOperator, FilterExpression, LogicalOperator, Query, Segment, Selector},
     token::{Token, TokenType},
 };
 use std::{collections::HashMap, iter::Peekable, ops::RangeInclusive, vec::IntoIter};
@@ -451,28 +448,31 @@ impl Parser {
         let token = it.next();
         let expr = self.parse_filter_expression(it, PRECEDENCE_LOWEST)?;
 
-        if let FilterExpression {
-            kind: FilterExpressionType::Function { ref name, .. },
-            ..
-        } = expr
-        {
-            if let Some(FunctionSignature {
-                return_type: ExpressionType::Value,
-                ..
-            }) = self.functions.get(name)
-            {
+        match expr {
+            FilterExpression::Function { ref name, span, .. } => {
+                if let Some(FunctionSignature {
+                    return_type: ExpressionType::Value,
+                    ..
+                }) = self.functions.get(name)
+                {
+                    return Err(JSONPathError::typ(
+                        format!("result of {}() must be compared", name),
+                        span,
+                    ));
+                }
+            }
+            FilterExpression::True { span, .. }
+            | FilterExpression::False { span, .. }
+            | FilterExpression::Null { span, .. }
+            | FilterExpression::String { span, .. }
+            | FilterExpression::Int { span, .. }
+            | FilterExpression::Float { span, .. } => {
                 return Err(JSONPathError::typ(
-                    format!("result of {}() must be compared", name),
-                    expr.span,
+                    String::from("filter expression literals must be compared"),
+                    span,
                 ));
             }
-        }
-
-        if expr.is_literal() {
-            return Err(JSONPathError::typ(
-                String::from("filter expression literals must be compared"),
-                expr.span,
-            ));
+            _ => (),
         }
 
         Ok(Selector::Filter {
@@ -487,12 +487,10 @@ impl Parser {
     ) -> Result<FilterExpression, JSONPathError> {
         let token = it.next();
         let expr = self.parse_filter_expression(it, PRECEDENCE_LOGICAL_NOT)?;
-        Ok(FilterExpression::new(
-            token.span,
-            FilterExpressionType::Not {
-                expression: Box::new(expr),
-            },
-        ))
+        Ok(FilterExpression::Not {
+            span: token.span,
+            expression: Box::new(expr),
+        })
     }
 
     fn parse_infix_expression(
@@ -509,107 +507,91 @@ impl Parser {
                 if left.is_literal() || right.is_literal() {
                     Err(JSONPathError::syntax(
                         String::from("filter expression literals must be compared"),
-                        left.span,
+                        left.span(),
                     ))
                 } else {
-                    Ok(FilterExpression::new(
-                        left.span,
-                        FilterExpressionType::Logical {
-                            left: Box::new(left),
-                            operator: LogicalOperator::And,
-                            right: Box::new(right),
-                        },
-                    ))
+                    Ok(FilterExpression::Logical {
+                        span: left.span(),
+                        left: Box::new(left),
+                        operator: LogicalOperator::And,
+                        right: Box::new(right),
+                    })
                 }
             }
             Or => {
                 if left.is_literal() || right.is_literal() {
                     Err(JSONPathError::syntax(
                         String::from("filter expression literals must be compared"),
-                        left.span,
+                        left.span(),
                     ))
                 } else {
-                    Ok(FilterExpression::new(
-                        left.span,
-                        FilterExpressionType::Logical {
-                            left: Box::new(left),
-                            operator: LogicalOperator::Or,
-                            right: Box::new(right),
-                        },
-                    ))
+                    Ok(FilterExpression::Logical {
+                        span: left.span(),
+                        left: Box::new(left),
+                        operator: LogicalOperator::Or,
+                        right: Box::new(right),
+                    })
                 }
             }
             Eq => {
-                self.assert_comparable(&left, left.span)?;
-                self.assert_comparable(&right, right.span)?;
-                Ok(FilterExpression::new(
-                    left.span,
-                    FilterExpressionType::Comparison {
-                        left: Box::new(left),
-                        operator: ComparisonOperator::Eq,
-                        right: Box::new(right),
-                    },
-                ))
+                self.assert_comparable(&left, left.span())?;
+                self.assert_comparable(&right, right.span())?;
+                Ok(FilterExpression::Comparison {
+                    span: left.span(),
+                    left: Box::new(left),
+                    operator: ComparisonOperator::Eq,
+                    right: Box::new(right),
+                })
             }
             Ge => {
-                self.assert_comparable(&left, left.span)?;
-                self.assert_comparable(&right, right.span)?;
-                Ok(FilterExpression::new(
-                    left.span,
-                    FilterExpressionType::Comparison {
-                        left: Box::new(left),
-                        operator: ComparisonOperator::Ge,
-                        right: Box::new(right),
-                    },
-                ))
+                self.assert_comparable(&left, left.span())?;
+                self.assert_comparable(&right, right.span())?;
+                Ok(FilterExpression::Comparison {
+                    span: left.span(),
+                    left: Box::new(left),
+                    operator: ComparisonOperator::Ge,
+                    right: Box::new(right),
+                })
             }
             Gt => {
-                self.assert_comparable(&left, left.span)?;
-                self.assert_comparable(&right, right.span)?;
-                Ok(FilterExpression::new(
-                    left.span,
-                    FilterExpressionType::Comparison {
-                        left: Box::new(left),
-                        operator: ComparisonOperator::Gt,
-                        right: Box::new(right),
-                    },
-                ))
+                self.assert_comparable(&left, left.span())?;
+                self.assert_comparable(&right, right.span())?;
+                Ok(FilterExpression::Comparison {
+                    span: left.span(),
+                    left: Box::new(left),
+                    operator: ComparisonOperator::Gt,
+                    right: Box::new(right),
+                })
             }
             Le => {
-                self.assert_comparable(&left, left.span)?;
-                self.assert_comparable(&right, right.span)?;
-                Ok(FilterExpression::new(
-                    left.span,
-                    FilterExpressionType::Comparison {
-                        left: Box::new(left),
-                        operator: ComparisonOperator::Le,
-                        right: Box::new(right),
-                    },
-                ))
+                self.assert_comparable(&left, left.span())?;
+                self.assert_comparable(&right, right.span())?;
+                Ok(FilterExpression::Comparison {
+                    span: left.span(),
+                    left: Box::new(left),
+                    operator: ComparisonOperator::Le,
+                    right: Box::new(right),
+                })
             }
             Lt => {
-                self.assert_comparable(&left, left.span)?;
-                self.assert_comparable(&right, right.span)?;
-                Ok(FilterExpression::new(
-                    left.span,
-                    FilterExpressionType::Comparison {
-                        left: Box::new(left),
-                        operator: ComparisonOperator::Lt,
-                        right: Box::new(right),
-                    },
-                ))
+                self.assert_comparable(&left, left.span())?;
+                self.assert_comparable(&right, right.span())?;
+                Ok(FilterExpression::Comparison {
+                    span: left.span(),
+                    left: Box::new(left),
+                    operator: ComparisonOperator::Lt,
+                    right: Box::new(right),
+                })
             }
             Ne => {
-                self.assert_comparable(&left, left.span)?;
-                self.assert_comparable(&right, right.span)?;
-                Ok(FilterExpression::new(
-                    left.span,
-                    FilterExpressionType::Comparison {
-                        left: Box::new(left),
-                        operator: ComparisonOperator::Ne,
-                        right: Box::new(right),
-                    },
-                ))
+                self.assert_comparable(&left, left.span())?;
+                self.assert_comparable(&right, right.span())?;
+                Ok(FilterExpression::Comparison {
+                    span: left.span(),
+                    left: Box::new(left),
+                    operator: ComparisonOperator::Ne,
+                    right: Box::new(right),
+                })
             }
             _ => Err(JSONPathError::syntax(
                 format!("unexpected infix operator {}", op_token.kind),
@@ -671,17 +653,14 @@ impl Parser {
             } => {
                 let value = unescape_string(value, span)?;
                 let token = it.next();
-                Ok(FilterExpression::new(
-                    token.span,
-                    FilterExpressionType::String { value },
-                ))
+                Ok(FilterExpression::String {
+                    span: token.span,
+                    value,
+                })
             }
             Token { kind: False, .. } => {
                 let token = it.next();
-                Ok(FilterExpression::new(
-                    token.span,
-                    FilterExpressionType::False {},
-                ))
+                Ok(FilterExpression::False { span: token.span })
             }
             Token {
                 kind: Float { ref value },
@@ -691,10 +670,10 @@ impl Parser {
                     JSONPathError::syntax(String::from("invalid float literal"), *span)
                 })?;
                 let token = it.next();
-                Ok(FilterExpression::new(
-                    token.span,
-                    FilterExpressionType::Float { value: f },
-                ))
+                Ok(FilterExpression::Float {
+                    span: token.span,
+                    value: f,
+                })
             }
             Token {
                 kind: Function { .. },
@@ -709,37 +688,30 @@ impl Parser {
                 })? as i64;
 
                 let token = it.next();
-                Ok(FilterExpression::new(
-                    token.span,
-                    FilterExpressionType::Int { value: i },
-                ))
+                Ok(FilterExpression::Int {
+                    span: token.span,
+                    value: i,
+                })
             }
             Token { kind: Null, .. } => {
                 let token = it.next();
-                Ok(FilterExpression::new(
-                    token.span,
-                    FilterExpressionType::Null {},
-                ))
+                Ok(FilterExpression::Null { span: token.span })
             }
             Token { kind: Root, .. } => {
                 let token = it.next();
                 let segments = self.parse_segments(it)?;
-                Ok(FilterExpression::new(
-                    token.span,
-                    FilterExpressionType::RootQuery {
-                        query: Box::new(Query { segments }),
-                    },
-                ))
+                Ok(FilterExpression::RootQuery {
+                    span: token.span,
+                    query: Box::new(Query { segments }),
+                })
             }
             Token { kind: Current, .. } => {
                 let token = it.next();
                 let segments = self.parse_segments(it)?;
-                Ok(FilterExpression::new(
-                    token.span,
-                    FilterExpressionType::RelativeQuery {
-                        query: Box::new(Query { segments }),
-                    },
-                ))
+                Ok(FilterExpression::RelativeQuery {
+                    span: token.span,
+                    query: Box::new(Query { segments }),
+                })
             }
             Token {
                 kind: SingleQuoteString { value },
@@ -747,17 +719,14 @@ impl Parser {
             } => {
                 let value = unescape_string(&value.replace("\\'", "'"), span)?;
                 let token = it.next();
-                Ok(FilterExpression::new(
-                    token.span,
-                    FilterExpressionType::String { value },
-                ))
+                Ok(FilterExpression::String {
+                    span: token.span,
+                    value,
+                })
             }
             Token { kind: True, .. } => {
                 let token = it.next();
-                Ok(FilterExpression::new(
-                    token.span,
-                    FilterExpressionType::True {},
-                ))
+                Ok(FilterExpression::True { span: token.span })
             }
             Token { kind: LParen, .. } => self.parse_grouped_expression(it),
             Token { kind: Not, .. } => self.parse_not_expression(it),
@@ -803,13 +772,11 @@ impl Parser {
         if let Function { ref name } = &token.kind {
             let function_name = name.to_string();
             self.assert_well_typed(&function_name, &arguments, &token)?;
-            Ok(FilterExpression::new(
-                token.span,
-                FilterExpressionType::Function {
-                    name: function_name,
-                    args: arguments,
-                },
-            ))
+            Ok(FilterExpression::Function {
+                span: token.span,
+                name: function_name,
+                args: arguments,
+            })
         } else {
             Err(JSONPathError::syntax(
                 format!("unexpected function argument token {}", token.kind),
@@ -855,9 +822,9 @@ impl Parser {
         expr: &FilterExpression,
         span: (usize, usize),
     ) -> Result<(), JSONPathError> {
-        match &expr.kind {
-            FilterExpressionType::RelativeQuery { query }
-            | FilterExpressionType::RootQuery { query } => {
+        match expr {
+            FilterExpression::RelativeQuery { query, .. }
+            | FilterExpression::RootQuery { query, .. } => {
                 if !query.is_singular() {
                     Err(JSONPathError::typ(
                         String::from("non-singular query is not comparable"),
@@ -867,7 +834,7 @@ impl Parser {
                     Ok(())
                 }
             }
-            FilterExpressionType::Function { name, .. } => {
+            FilterExpression::Function { name, .. } => {
                 if let Some(FunctionSignature {
                     return_type: ExpressionType::Value,
                     ..
@@ -932,13 +899,10 @@ impl Parser {
                 ExpressionType::Logical => {
                     if !matches!(
                         arg,
-                        FilterExpression {
-                            kind: FilterExpressionType::RelativeQuery { .. }
-                                | FilterExpressionType::RootQuery { .. }
-                                | FilterExpressionType::Logical { .. }
-                                | FilterExpressionType::Comparison { .. },
-                            ..
-                        }
+                        FilterExpression::RelativeQuery { .. }
+                            | FilterExpression::RootQuery { .. }
+                            | FilterExpression::Logical { .. }
+                            | FilterExpression::Comparison { .. },
                     ) {
                         return Err(JSONPathError::typ(
                             format!(
@@ -974,64 +938,40 @@ impl Parser {
             return true;
         }
 
-        // singular queries will be coerced to a value
-        if let FilterExpression {
-            kind:
-                FilterExpressionType::RelativeQuery { query }
-                | FilterExpressionType::RootQuery { query },
-            ..
-        } = expr
-        {
-            if query.is_singular() {
-                return true;
+        match expr {
+            FilterExpression::RelativeQuery { query, .. }
+            | FilterExpression::RootQuery { query, .. } => {
+                // singular queries will be coerced to a value
+                query.is_singular()
             }
-        }
-
-        // some functions return a value
-        if let FilterExpression {
-            kind: FilterExpressionType::Function { name, .. },
-            ..
-        } = expr
-        {
-            if let Some(FunctionSignature {
-                return_type: ExpressionType::Value,
-                ..
-            }) = self.functions.get(name)
-            {
-                return true;
+            FilterExpression::Function { name, .. } => {
+                // some functions return a value
+                matches!(
+                    self.functions.get(name),
+                    Some(FunctionSignature {
+                        return_type: ExpressionType::Value,
+                        ..
+                    })
+                )
             }
+            _ => false,
         }
-
-        false
     }
 
     fn is_nodes_type(&self, expr: &FilterExpression) -> bool {
-        if matches!(
-            expr,
-            FilterExpression {
-                kind: FilterExpressionType::RelativeQuery { .. }
-                    | FilterExpressionType::RootQuery { .. },
-                ..
+        match expr {
+            FilterExpression::RelativeQuery { .. } | FilterExpression::RootQuery { .. } => true,
+            FilterExpression::Function { name, .. } => {
+                matches!(
+                    self.functions.get(name),
+                    Some(FunctionSignature {
+                        return_type: ExpressionType::Nodes,
+                        ..
+                    })
+                )
             }
-        ) {
-            return true;
+            _ => false,
         }
-
-        if let FilterExpression {
-            kind: FilterExpressionType::Function { name, .. },
-            ..
-        } = expr
-        {
-            if let Some(FunctionSignature {
-                return_type: ExpressionType::Nodes,
-                ..
-            }) = self.functions.get(name)
-            {
-                return true;
-            }
-        }
-
-        false
     }
 
     fn parse_i_json_int(

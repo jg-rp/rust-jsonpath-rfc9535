@@ -208,85 +208,113 @@ impl fmt::Display for ComparisonOperator {
 }
 
 #[derive(Debug)]
-pub enum FilterExpressionType {
-    True {},
-    False {},
-    Null {},
+pub enum FilterExpression {
+    True {
+        span: (usize, usize),
+    },
+    False {
+        span: (usize, usize),
+    },
+    Null {
+        span: (usize, usize),
+    },
     String {
+        span: (usize, usize),
         value: String,
     },
     Int {
+        span: (usize, usize),
         value: i64,
     },
     Float {
+        span: (usize, usize),
         value: f64,
     },
     Not {
+        span: (usize, usize),
         expression: Box<FilterExpression>,
     },
     Logical {
+        span: (usize, usize),
         left: Box<FilterExpression>,
         operator: LogicalOperator,
         right: Box<FilterExpression>,
     },
     Comparison {
+        span: (usize, usize),
         left: Box<FilterExpression>,
         operator: ComparisonOperator,
         right: Box<FilterExpression>,
     },
     RelativeQuery {
+        span: (usize, usize),
         query: Box<Query>,
     },
     RootQuery {
+        span: (usize, usize),
         query: Box<Query>,
     },
     Function {
+        span: (usize, usize),
         name: String,
         args: Vec<FilterExpression>,
     },
 }
 
-#[derive(Debug)]
-pub struct FilterExpression {
-    pub span: (usize, usize),
-    pub kind: FilterExpressionType,
-}
-
 impl FilterExpression {
-    pub fn new(span: (usize, usize), kind: FilterExpressionType) -> Self {
-        FilterExpression { span, kind }
+    pub fn is_literal(&self) -> bool {
+        matches!(
+            self,
+            FilterExpression::True { .. }
+                | FilterExpression::False { .. }
+                | FilterExpression::Null { .. }
+                | FilterExpression::String { .. }
+                | FilterExpression::Int { .. }
+                | FilterExpression::Float { .. }
+        )
     }
 
-    pub fn is_literal(&self) -> bool {
-        use FilterExpressionType::*;
-        matches!(
-            self.kind,
-            True {} | False {} | Null {} | String { .. } | Int { .. } | Float { .. }
-        )
+    pub fn span(&self) -> (usize, usize) {
+        match self {
+            FilterExpression::True { span, .. }
+            | FilterExpression::False { span, .. }
+            | FilterExpression::Null { span, .. }
+            | FilterExpression::String { span, .. }
+            | FilterExpression::Int { span, .. }
+            | FilterExpression::Float { span, .. }
+            | FilterExpression::Not { span, .. }
+            | FilterExpression::Logical { span, .. }
+            | FilterExpression::Comparison { span, .. }
+            | FilterExpression::RelativeQuery { span, .. }
+            | FilterExpression::RootQuery { span, .. }
+            | FilterExpression::Function { span, .. } => *span,
+        }
     }
 }
 
 impl fmt::Display for FilterExpression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            FilterExpressionType::True {} => f.write_str("true"),
-            FilterExpressionType::False {} => f.write_str("false"),
-            FilterExpressionType::Null {} => f.write_str("null"),
-            FilterExpressionType::String { value } => write!(f, "\"{value}\""),
-            FilterExpressionType::Int { value } => write!(f, "{value}"),
-            FilterExpressionType::Float { value } => write!(f, "{value}"),
-            FilterExpressionType::Not { expression } => write!(f, "!{expression}"),
-            FilterExpressionType::Logical {
+        match self {
+            FilterExpression::True { .. } => f.write_str("true"),
+            FilterExpression::False { .. } => f.write_str("false"),
+            FilterExpression::Null { .. } => f.write_str("null"),
+            FilterExpression::String { value, .. } => write!(f, "\"{value}\""),
+            FilterExpression::Int { value, .. } => write!(f, "{value}"),
+            FilterExpression::Float { value, .. } => write!(f, "{value}"),
+            FilterExpression::Not { expression, .. } => write!(f, "!{expression}"),
+            FilterExpression::Logical {
                 left,
                 operator,
                 right,
+                ..
             } => write!(f, "({left} {operator} {right})"),
-            FilterExpressionType::Comparison {
+            FilterExpression::Comparison {
                 left,
                 operator,
                 right,
+                ..
             } => write!(f, "{left} {operator} {right}"),
-            FilterExpressionType::RelativeQuery { query } => {
+            FilterExpression::RelativeQuery { query, .. } => {
                 write!(
                     f,
                     "@{}",
@@ -298,7 +326,7 @@ impl fmt::Display for FilterExpression {
                         .join("")
                 )
             }
-            FilterExpressionType::RootQuery { query } => {
+            FilterExpression::RootQuery { query, .. } => {
                 write!(
                     f,
                     "${}",
@@ -310,7 +338,7 @@ impl fmt::Display for FilterExpression {
                         .join("")
                 )
             }
-            FilterExpressionType::Function { name, args } => {
+            FilterExpression::Function { name, args, .. } => {
                 write!(
                     f,
                     "{}({})",

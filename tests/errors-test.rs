@@ -1,5 +1,8 @@
 use jsonpath_rfc9535::Query;
 
+// TODO: test non-standard functions types
+// TODO: filter expression literals must be compared
+
 mod errors {
     use super::*;
 
