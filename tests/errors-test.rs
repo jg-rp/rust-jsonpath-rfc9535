@@ -1,7 +1,5 @@
 use jsonpath_rfc9535::Query;
 
-// TODO: filter expression literals must be compared
-
 mod errors {
     use super::*;
 
@@ -45,5 +43,22 @@ mod errors {
     #[should_panic(expected = "unclosed bracketed selection")]
     fn unclosed_bracketed_selection_inside_filter() {
         Query::standard("$[?@.a < 1").unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "filter expression literals must be compared")]
+    fn filter_just_true() {
+        Query::standard("$[?true]").unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "filter expression literals must be compared")]
+    fn filter_just_string() {
+        Query::standard("$[?'foo']").unwrap();
+    }
+    #[test]
+    #[should_panic(expected = "filter expression literals must be compared")]
+    fn filter_comparison_and_literal() {
+        Query::standard("$[?true == false && false]").unwrap();
     }
 }

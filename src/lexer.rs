@@ -331,7 +331,10 @@ fn lex_descendant_segment(l: &mut Lexer) -> State {
         });
         State::LexSegment
     } else {
-        let msg = format!("unexpected descendant selection token '{}'", l.peek());
+        let msg = format!(
+            "unexpected descendant selection token '{}'",
+            l.next().unwrap_or(EOQ)
+        );
         l.error(msg)
     }
 }
@@ -412,7 +415,10 @@ fn lex_inside_bracketed_segment(l: &mut Lexer) -> State {
                 });
                 State::LexInsideBracketedSegment
             } else {
-                let msg = format!("expected a digit after '-', found '{}'", l.peek());
+                let msg = format!(
+                    "expected a digit after '-', found '{}'",
+                    l.next().unwrap_or(EOQ)
+                );
                 l.error(msg)
             }
         }
@@ -424,7 +430,10 @@ fn lex_inside_bracketed_segment(l: &mut Lexer) -> State {
                 });
                 State::LexInsideBracketedSegment
             } else {
-                let msg = format!("unexpected '{}' in bracketed selection", l.peek());
+                let msg = format!(
+                    "unexpected '{}' in bracketed selection",
+                    l.next().unwrap_or(EOQ)
+                );
                 l.error(msg)
             }
         }
@@ -577,12 +586,15 @@ fn lex_inside_filter(l: &mut Lexer) -> State {
                             l.next();
                             l.ignore(); // discard the left paren
                         } else {
-                            return l.error(String::from("expected a keyword or function call"));
+                            return l.error(format!("unknown keyword `{}`", l.value()));
                         }
                     }
                 }
             } else {
-                let msg = format!("unexpected filter expression token '{}'", l.peek());
+                let msg = format!(
+                    "unexpected filter expression token '{}'",
+                    l.next().unwrap_or(EOQ)
+                );
                 return l.error(msg);
             }
 
@@ -633,7 +645,7 @@ fn lex_string(l: &mut Lexer, quote: char, next_state: State) -> State {
 
 fn lex_number(l: &mut Lexer) -> State {
     if !l.accept_run(is_digit) {
-        let msg = format!("expected a digit, found '{}'", l.peek());
+        let msg = format!("expected a digit, found `{}`", l.next().unwrap_or(EOQ));
         return l.error(msg);
     }
 
@@ -874,7 +886,7 @@ mod tests {
                             .into_boxed_str()
                     },
                     6,
-                    7
+                    8
                 ),
             ]
         )
@@ -1088,7 +1100,7 @@ mod tests {
                             .into_boxed_str()
                     },
                     3,
-                    3
+                    4
                 ),
             ]
         )
@@ -1110,7 +1122,7 @@ mod tests {
                             .into_boxed_str()
                     },
                     3,
-                    3
+                    4
                 ),
             ]
         )
