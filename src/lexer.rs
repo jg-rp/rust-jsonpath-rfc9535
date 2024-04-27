@@ -568,7 +568,7 @@ fn lex_inside_filter(l: &mut Lexer) -> State {
         _ => {
             if is_digit(l.peek()) {
                 // positive number
-                lex_number(l);
+                return lex_number(l);
             } else if l.accept_run(is_function_name_first) {
                 // function name or keyword
                 l.accept_run(is_function_name_char);
