@@ -607,7 +607,7 @@ fn lex_string(l: &mut Lexer, quote: char, next_state: State) -> State {
     l.ignore(); // ignore open quote
 
     if l.peek() == EOQ {
-        todo!("handle end of query after open quote");
+        return l.error("unexpected end of query or null byte".to_string());
     }
 
     loop {
