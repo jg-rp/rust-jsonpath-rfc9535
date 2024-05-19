@@ -35,6 +35,7 @@ macro_rules! assert_invalid {
 }
 
 // These test cases are generated automatically by scripts/cts.py.
+// TODO: update CTS
 
 assert_valid! {
     basic__root_0: "$",
