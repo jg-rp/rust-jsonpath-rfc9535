@@ -1,5 +1,5 @@
 [package]
-name = "jsonpath_pest"
+name = "jsonpath_rfc9535_pest"
 version = "0.1.0"
 edition = "2021"
 

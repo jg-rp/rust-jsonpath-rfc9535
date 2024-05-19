@@ -17,6 +17,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cargo build -p jsonpath_pest --verbose
+      run: cargo build -p jsonpath_rfc9535_pest --verbose
     - name: Run tests
-      run: cargo test -p jsonpath_pest --verbose
+      run: cargo test -p jsonpath_rfc9535_pest --verbose

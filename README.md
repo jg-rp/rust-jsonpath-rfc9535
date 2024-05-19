@@ -1,8 +1,8 @@
 # Rust JSONPath RFC 9535
 
-A JSONPath expression parser, producing a JSON implementation agnostic abstract syntax tree, following the JSONPath model described in RFC 9535.
+Two JSONPath expression parsers, producing a JSON implementation agnostic abstract syntax tree, following the JSONPath model described in RFC 9535.
 
-These JSONPath lexers/parsers were written with Python bindings in mind - hence the desire for an AST that is not tied to any particular JSON implementation - and forked into [JPQ](https://github.com/jg-rp/jpq). The `jsonpath_rfc9535` and `jsonpath_pest` (WIP) crates are kept here for reference.
+These JSONPath lexers/parsers were written with Python bindings in mind - hence the desire for an AST not tied to any particular JSON implementation - and forked into [JPQ](https://github.com/jg-rp/jpq). The `jsonpath_rfc9535` and `jsonpath_rfc9535_pest` (WIP) crates are kept here for reference.
 
 ## Standard queries
 
@@ -100,16 +100,20 @@ Error: JSONPathError { kind: NameError, msg: "unknown function `foo`", span: (8,
 
 TODO:
 
+## Performance
+
+TODO: performance comparison between pest-based and hand-crafted parsers.
+
 ## Contributing
 
 ### Development
 
 We're using a Rust [workspace](https://doc.rust-lang.org/cargo/reference/workspaces.html) with two crates.
 
-- `crates/jsonpath_pest` is a [pest](https://github.com/pest-parser)-based JSONPath parser.
+- `crates/jsonpath_rfc9535_pest` is a [pest](https://github.com/pest-parser)-based JSONPath parser.
 - `crates/jsonpath_rfc9535` is a hand-crafted lexer and parser for JSONPath.
 
-`crates/jsonpath_rfc9535` is the default member in the workspace. Use the `-p jsonpath_pest` or `--package jsonpath_pest` option to select the `jsonpath_pest` crate.
+`crates/jsonpath_rfc9535` is the default workspace member. Use the `-p jsonpath_rfc9535_pest` or `--package jsonpath_rfc9535_pest` option to select the `jsonpath_rfc9535_pest` crate.
 
 Run tests with cargo.
 

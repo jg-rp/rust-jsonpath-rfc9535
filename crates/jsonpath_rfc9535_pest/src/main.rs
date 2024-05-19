@@ -1,4 +1,4 @@
-use jsonpath_pest::parser::{JSONPath, Rule};
+use jsonpath_rfc9535_pest::parser::{JSONPath, Rule};
 use pest::Parser;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
