@@ -2,7 +2,7 @@
 
 A JSONPath expression parser, producing a JSON implementation agnostic abstract syntax tree, following the JSONPath model described in RFC 9535.
 
-These JSONPath lexers/parsers were written with Python bindings in mind - hence the desire for an AST that is not tied to any particular JSONPath implementation - and forked into [JPQ](https://github.com/jg-rp/jpq). The `jsonpath_rfc9535` and `jsonpath_pest` (WIP) crates are kept here for reference.
+These JSONPath lexers/parsers were written with Python bindings in mind - hence the desire for an AST that is not tied to any particular JSON implementation - and forked into [JPQ](https://github.com/jg-rp/jpq). The `jsonpath_rfc9535` and `jsonpath_pest` (WIP) crates are kept here for reference.
 
 ## Standard queries
 
