@@ -1,13 +1,10 @@
-use jsonpath_rfc9535_pest::parser::{JSONPath, Rule};
-use pest::Parser;
+use jsonpath_rfc9535_pest::parser::JSONPathParser;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let rv = JSONPath::parse(Rule::jsonpath, "$.foo[0, 2]")?;
-    let tokens = rv.tokens();
-
-    for token in tokens {
-        println!("{:?}", token);
+fn main() {
+    let parser = JSONPathParser::new();
+    let rv = parser.parse("$[?@.foo > 2]");
+    match rv {
+        Err(err) => print!("{}", err.msg),
+        Ok(query) => println!("{}", query),
     }
-
-    Ok(())
 }

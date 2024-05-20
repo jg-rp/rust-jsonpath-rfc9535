@@ -5,11 +5,195 @@
 //! [pest]: https://pest.rs/
 //! [pest book]: https://pest.rs/book/
 
+use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
+
+use crate::{
+    ast::{ComparisonOperator, FilterExpression, LogicalOperator, Query, Segment, Selector},
+    errors::JSONPathError,
+};
 
 #[derive(Parser)]
 #[grammar = "jsonpath.pest"]
 pub struct JSONPath;
+
+pub struct JSONPathParser;
+
+impl JSONPathParser {
+    pub fn new() -> Self {
+        JSONPathParser {}
+    }
+
+    pub fn parse(&self, query: &str) -> Result<Query, JSONPathError> {
+        Ok(Query {
+            segments: JSONPath::parse(Rule::jsonpath, query)
+                .map_err(|err| JSONPathError::syntax(err.to_string()))?
+                .map(|segment| self.parse_segment(segment))
+                .collect(),
+        })
+    }
+
+    fn parse_segment(&self, segment: Pair<Rule>) -> Segment {
+        println!("SEG: {}", segment);
+        match segment.as_rule() {
+            Rule::child_segment => Segment::Child {
+                selectors: self.parse_segment_inner(segment.into_inner().next().unwrap()),
+            },
+            Rule::descendant_segment => Segment::Recursive {
+                selectors: self.parse_segment_inner(segment.into_inner().next().unwrap()),
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    fn parse_segment_inner(&self, segment: Pair<Rule>) -> Vec<Selector> {
+        println!("SEG INNER: {}", segment);
+        match segment.as_rule() {
+            Rule::bracketed_selection => segment
+                .into_inner()
+                .map(|selector| self.parse_selector(selector))
+                .collect(),
+            Rule::wildcard_selector => vec![Selector::Wild],
+            Rule::member_name_shorthand => vec![Selector::Name {
+                name: segment.as_str().to_owned(),
+            }],
+            _ => unreachable!(),
+        }
+    }
+
+    fn parse_selector(&self, selector: Pair<Rule>) -> Selector {
+        println!("SEL: {}", selector);
+        match selector.as_rule() {
+            Rule::name_selector => Selector::Name {
+                name: selector.as_str().to_owned(), // TODO: decode string
+            },
+            Rule::wildcard_selector => Selector::Wild,
+            Rule::slice_selector => self.parse_slice_selector(selector),
+            Rule::index_selector => Selector::Index {
+                index: selector.as_str().parse().unwrap(), // TODO:
+            },
+            Rule::filter_selector => self.parse_filter_selector(selector),
+            _ => unreachable!(),
+        }
+    }
+
+    fn parse_slice_selector(&self, selector: Pair<Rule>) -> Selector {
+        println!("SLICE: {}", selector);
+        let mut start: Option<i64> = None;
+        let mut stop: Option<i64> = None;
+        let mut step: Option<i64> = None;
+
+        for i in selector.into_inner() {
+            match i.as_rule() {
+                Rule::start => start = Some(i.as_str().parse().unwrap()), // TODO:
+                Rule::stop => stop = Some(i.as_str().parse().unwrap()),   // TODO:
+                Rule::step => step = Some(i.as_str().parse().unwrap()),   // TODO:
+                _ => unreachable!(),
+            }
+        }
+
+        Selector::Slice { start, stop, step }
+    }
+
+    fn parse_filter_selector(&self, selector: Pair<Rule>) -> Selector {
+        println!("FILTER: {}", selector);
+        Selector::Filter {
+            expression: Box::new(
+                self.parse_logical_or_expression(selector.into_inner().next().unwrap()),
+            ),
+        }
+    }
+
+    // TODO: operator precedence with pest::PrattParser
+
+    fn parse_logical_or_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+        let mut it = expr.into_inner();
+        let mut or_expr = self.parse_logical_and_expression(it.next().unwrap());
+
+        for and_expr in it {
+            or_expr = FilterExpression::Logical {
+                left: Box::new(or_expr),
+                operator: LogicalOperator::Or,
+                right: Box::new(self.parse_logical_and_expression(and_expr)),
+            };
+        }
+
+        or_expr
+    }
+
+    fn parse_logical_and_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+        let mut it = expr.into_inner();
+        let mut and_expr = self.parse_basic_expression(it.next().unwrap());
+
+        for basic_expr in it {
+            and_expr = FilterExpression::Logical {
+                left: Box::new(and_expr),
+                operator: LogicalOperator::And,
+                right: Box::new(self.parse_basic_expression(basic_expr)),
+            };
+        }
+
+        and_expr
+    }
+
+    fn parse_basic_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+        match expr.as_rule() {
+            Rule::paren_expr => self.parse_paren_expression(expr),
+            Rule::comparison_expr => self.parse_comparison_expression(expr),
+            Rule::test_expr => self.parse_test_expression(expr),
+            _ => unreachable!(),
+        }
+    }
+
+    fn parse_paren_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+        let mut it = expr.into_inner();
+        let p = it.next().unwrap();
+        match p.as_rule() {
+            Rule::logical_not_op => FilterExpression::Not {
+                expression: Box::new(self.parse_logical_or_expression(it.next().unwrap())),
+            },
+            Rule::logical_or_expr => self.parse_logical_or_expression(p),
+            _ => unreachable!(),
+        }
+    }
+
+    fn parse_comparison_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+        let mut it = expr.into_inner();
+        let left = self.parse_comparable(it.next().unwrap());
+
+        let operator = match it.next().unwrap().as_str() {
+            "==" => ComparisonOperator::Eq,
+            "!=" => ComparisonOperator::Ne,
+            "<=" => ComparisonOperator::Le,
+            ">=" => ComparisonOperator::Ge,
+            "<" => ComparisonOperator::Lt,
+            ">" => ComparisonOperator::Gt,
+            _ => unreachable!(),
+        };
+
+        let right = self.parse_comparable(it.next().unwrap());
+        FilterExpression::Comparison {
+            left: Box::new(left),
+            operator,
+            right: Box::new(right),
+        }
+    }
+
+    fn parse_comparable(&self, expr: Pair<Rule>) -> FilterExpression {
+        match expr.as_rule() {
+            Rule::number => todo!(),
+            Rule::string_literal => todo!(),
+            Rule::true_literal => todo!(),
+            Rule::false_literal => todo!(),
+            Rule::null => todo!(),
+            _ => unreachable!(),
+        }
+    }
+
+    fn parse_test_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+        todo!()
+    }
+}
 
 #[cfg(test)]
 mod tests {

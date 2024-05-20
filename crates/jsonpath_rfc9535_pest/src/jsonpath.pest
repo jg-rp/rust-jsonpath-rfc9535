@@ -1,4 +1,6 @@
-jsonpath = _{ SOI ~ jsonpath_query ~ EOI }
+jsonpath = _{ SOI ~ jsonpath_query ~ eoi }
+// TODO: does silencing eoi (rather than using EOI) effect error reporting?
+eoi = _{ !ANY }
 
 jsonpath_query = _{ root_identifier ~ segments }
 segments       = _{ (S ~ segment)* }
@@ -6,7 +8,7 @@ segments       = _{ (S ~ segment)* }
 B = _{ "\x20" | "\x09" | "\x0A" | "\x0D" }
 S = _{ B* }
 
-root_identifier = { "$" }
+root_identifier = _{ "$" }
 
 selector = _{
     name_selector
@@ -73,14 +75,16 @@ low_surrogate     = _{ ^"D" ~ (^"C" | ^"D" | ^"E" | ^"F") ~ ASCII_HEX_DIGIT{2} }
 wildcard_selector =  { "*" }
 index_selector    = @{ int }
 int               =  { "0" | ("-"? ~ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
-slice_selector    =  { (int ~ S)? ~ ":" ~ S ~ (int ~ S)? ~ (":" ~ (S ~ int)?)? }
+slice_selector    =  { (start ~ S)? ~ ":" ~ S ~ (stop ~ S)? ~ (":" ~ (S ~ step)?)? }
+start             = @{ int }
+stop              = @{ int }
+step              = @{ int }
 filter_selector   =  { "?" ~ S ~ logical_expr }
-logical_expr      =  { logical_or_expr }
-// TODO: logical_op rule
-logical_or_expr  = { logical_and_expr ~ (S ~ "||" ~ S ~ logical_and_expr)* }
-logical_and_expr = { basic_expr ~ (S ~ "&&" ~ S ~ basic_expr)* }
+logical_expr      = _{ logical_or_expr }
+logical_or_expr   =  { logical_and_expr ~ (S ~ "||" ~ S ~ logical_and_expr)* }
+logical_and_expr  =  { basic_expr ~ (S ~ "&&" ~ S ~ basic_expr)* }
 
-basic_expr = {
+basic_expr = _{
     paren_expr
   | comparison_expr
   | test_expr
@@ -97,12 +101,12 @@ comparison_expr         = { comparable ~ S ~ comparison_op ~ S ~ comparable }
 literal = {
     number
   | string_literal
-  | true
-  | false
+  | true_literal
+  | false_literal
   | null
 }
 
-comparable = {
+comparable = _{
     literal
   | singular_query
   | function_expr
@@ -131,8 +135,8 @@ index_segment       = _{ "[" ~ index_selector ~ "]" }
 number              =  { (int | "-0") ~ frac? ~ exp? }
 frac                =  { "." ~ ASCII_DIGIT+ }
 exp                 =  { ^"e" ~ ("-" | "+")? ~ ASCII_DIGIT+ }
-true                =  { "true" }
-false               =  { "false" }
+true_literal        =  { "true" }
+false_literal       =  { "false" }
 null                =  { "null" }
 function_name       =  { function_name_first ~ function_name_char* }
 function_name_first =  { ASCII_ALPHA_LOWER }
@@ -159,7 +163,7 @@ child_segment = {
   | ("." ~ (wildcard_selector | member_name_shorthand))
 }
 
-bracketed_selection = _{ "[" ~ S ~ selector ~ (S ~ "," ~ S ~ selector)* ~ S ~ "]" }
+bracketed_selection = { "[" ~ S ~ selector ~ (S ~ "," ~ S ~ selector)* ~ S ~ "]" }
 
 member_name_shorthand = { name_first ~ name_char* }
 
