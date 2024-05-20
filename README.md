@@ -1,10 +1,15 @@
 # Rust JSONPath RFC 9535
 
-Two JSONPath expression parsers, producing a JSON implementation agnostic abstract syntax tree, following the JSONPath model described in RFC 9535.
+Two different JSONPath expression parsers producing a JSON implementation agnostic abstract syntax tree, following the JSONPath model described in RFC 9535.
 
-These JSONPath lexers/parsers were written with Python bindings in mind - hence the desire for an AST not tied to any particular JSON implementation - and forked into [JPQ](https://github.com/jg-rp/jpq). The `jsonpath_rfc9535` and `jsonpath_rfc9535_pest` (WIP) crates are kept here for reference.
+- `crates/jsonpath_rfc9535_pest` (WIP) is a [pest](https://github.com/pest-parser)-based JSONPath parser.
+- `crates/jsonpath_rfc9535` is a hand-crafted lexer and parser for JSONPath.
 
-## Standard queries
+Both were written with Python bindings in mind and forked into [JPQ](https://github.com/jg-rp/jpq). They are now kept here for reference and to compare performance between the two lexing/parsing approaches.
+
+## Hand-crafted parser
+
+### Standard queries
 
 To parse a JSONPath expression that is limited to standard [function extensions], use `Query::standard`.
 
@@ -57,7 +62,7 @@ Query {
 }
 ```
 
-## Function extensions
+### Function extensions
 
 Register [function extensions] with a new `Parser` by calling `Parser::add_function`,
 then use `Parser::parse` to create a new `Query`.
