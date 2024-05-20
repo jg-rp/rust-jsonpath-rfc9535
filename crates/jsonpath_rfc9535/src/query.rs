@@ -47,31 +47,19 @@ impl Query {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.segments.len() == 0
+        self.segments.is_empty()
     }
 
     pub fn is_singular(&self) -> bool {
-        for segment in self.segments.iter() {
-            match segment {
-                Segment::Child { selectors, .. } => {
-                    // A single name or index selector?
-                    if selectors.len() == 1
-                        && selectors.first().is_some_and(|s| {
-                            matches!(s, Selector::Name { .. } | Selector::Index { .. })
-                        })
-                    {
-                        continue;
-                    } else {
-                        return false;
-                    }
-                }
-                Segment::Recursive { .. } => {
-                    return false;
-                }
+        self.segments.iter().all(|segment| {
+            if let Segment::Child { selectors, .. } = segment {
+                return selectors.len() == 1
+                    && selectors.first().is_some_and(|selector| {
+                        matches!(selector, Selector::Name { .. } | Selector::Index { .. })
+                    });
             }
-        }
-
-        true
+            false
+        })
     }
 }
 
