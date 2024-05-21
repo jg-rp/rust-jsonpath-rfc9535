@@ -6,7 +6,14 @@
 //!
 //! [RFC 9535]: https://datatracker.ietf.org/doc/html/rfc9535
 
+use lazy_static::lazy_static;
 use std::fmt::{self, Write};
+
+use crate::{errors::JSONPathError, parser::JSONPathParser};
+
+lazy_static! {
+    static ref PARSER: JSONPathParser = JSONPathParser::new();
+}
 
 #[derive(Debug)]
 pub struct Query {
@@ -16,6 +23,10 @@ pub struct Query {
 impl Query {
     pub fn new(segments: Vec<Segment>) -> Self {
         Query { segments }
+    }
+
+    pub fn standard(expr: &str) -> Result<Self, JSONPathError> {
+        PARSER.parse(expr)
     }
 
     pub fn is_empty(&self) -> bool {

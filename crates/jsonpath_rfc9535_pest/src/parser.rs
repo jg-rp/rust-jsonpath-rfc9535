@@ -40,7 +40,6 @@ impl JSONPathParser {
     }
 
     fn parse_segment(&self, segment: Pair<Rule>) -> Segment {
-        println!("SEG: {}", segment);
         match segment.as_rule() {
             Rule::child_segment => Segment::Child {
                 selectors: self.parse_segment_inner(segment.into_inner().next().unwrap()),
@@ -56,7 +55,6 @@ impl JSONPathParser {
     }
 
     fn parse_segment_inner(&self, segment: Pair<Rule>) -> Vec<Selector> {
-        println!("SEG INNER: {}", segment);
         match segment.as_rule() {
             Rule::bracketed_selection => segment
                 .into_inner()
@@ -72,7 +70,6 @@ impl JSONPathParser {
     }
 
     fn parse_selector(&self, selector: Pair<Rule>) -> Selector {
-        println!("SEL: {}", selector);
         match selector.as_rule() {
             Rule::double_quoted => Selector::Name {
                 name: unescape_string(selector.as_str()),
@@ -95,7 +92,6 @@ impl JSONPathParser {
     }
 
     fn parse_slice_selector(&self, selector: Pair<Rule>) -> Selector {
-        println!("SLICE: {}", selector);
         let mut start: Option<i64> = None;
         let mut stop: Option<i64> = None;
         let mut step: Option<i64> = None;
@@ -113,7 +109,6 @@ impl JSONPathParser {
     }
 
     fn parse_filter_selector(&self, selector: Pair<Rule>) -> Selector {
-        println!("FILTER: {}", selector);
         Selector::Filter {
             expression: Box::new(
                 self.parse_logical_or_expression(selector.into_inner().next().unwrap()),
@@ -197,7 +192,6 @@ impl JSONPathParser {
     }
 
     fn parse_comparable(&self, expr: Pair<Rule>) -> FilterExpression {
-        println!("COMP: {}", expr);
         match expr.as_rule() {
             Rule::number => self.parse_number(expr),
             Rule::double_quoted => FilterExpression::String {
@@ -277,10 +271,8 @@ impl JSONPathParser {
     }
 
     fn parse_test_expression(&self, expr: Pair<Rule>) -> FilterExpression {
-        println!("TEST: {} -> {}", expr, expr.as_str());
         let mut it = expr.into_inner();
         let pair = it.next().unwrap();
-        println!("TEST PAIR: {} -> {}", pair, pair.as_str());
         match pair.as_rule() {
             Rule::logical_not_op => FilterExpression::Not {
                 expression: Box::new(self.parse_test_expression_inner(it.next().unwrap())),
@@ -329,7 +321,6 @@ impl JSONPathParser {
     }
 
     fn parse_function_argument(&self, expr: Pair<Rule>) -> FilterExpression {
-        println!("ARG {}", expr);
         match expr.as_rule() {
             Rule::number => self.parse_number(expr),
             Rule::double_quoted => FilterExpression::String {

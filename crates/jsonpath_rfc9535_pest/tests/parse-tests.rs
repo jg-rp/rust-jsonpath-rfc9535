@@ -75,4 +75,5 @@ parse_tests! {
         "$['😀']"
     ),
     function_count: ("$[?count(@..*)>2]", "$[?count(@..[*]) > 2]"),
+    filter_and_binds_more_tightly_than_or: ("$[?@.a || @.b && @.b]", "$[?(@['a'] || (@['b'] && @['b']))]"),
 }
