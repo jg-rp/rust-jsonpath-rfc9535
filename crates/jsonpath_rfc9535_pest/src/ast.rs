@@ -171,9 +171,9 @@ impl fmt::Display for ComparisonOperator {
 
 #[derive(Debug)]
 pub enum FilterExpression {
-    True {},
-    False {},
-    Null {},
+    True,
+    False,
+    Null,
     String {
         value: String,
     },
@@ -228,7 +228,7 @@ impl fmt::Display for FilterExpression {
             FilterExpression::True { .. } => f.write_str("true"),
             FilterExpression::False { .. } => f.write_str("false"),
             FilterExpression::Null { .. } => f.write_str("null"),
-            FilterExpression::String { value, .. } => write!(f, "\"{value}\""),
+            FilterExpression::String { value, .. } => write!(f, "'{value}'"),
             FilterExpression::Int { value, .. } => write!(f, "{value}"),
             FilterExpression::Float { value, .. } => write!(f, "{value}"),
             FilterExpression::Not { expression, .. } => write!(f, "!{expression}"),

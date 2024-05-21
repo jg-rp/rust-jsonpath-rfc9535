@@ -19,6 +19,12 @@ pub struct JSONPath;
 
 pub struct JSONPathParser;
 
+impl Default for JSONPathParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JSONPathParser {
     pub fn new() -> Self {
         JSONPathParser {}
@@ -42,6 +48,9 @@ impl JSONPathParser {
             Rule::descendant_segment => Segment::Recursive {
                 selectors: self.parse_segment_inner(segment.into_inner().next().unwrap()),
             },
+            Rule::name_segment | Rule::index_segment => Segment::Child {
+                selectors: vec![self.parse_selector(segment.into_inner().next().unwrap())],
+            },
             _ => unreachable!(),
         }
     }
@@ -55,6 +64,7 @@ impl JSONPathParser {
                 .collect(),
             Rule::wildcard_selector => vec![Selector::Wild],
             Rule::member_name_shorthand => vec![Selector::Name {
+                // for child_segment
                 name: segment.as_str().to_owned(),
             }],
             _ => unreachable!(),
@@ -64,8 +74,11 @@ impl JSONPathParser {
     fn parse_selector(&self, selector: Pair<Rule>) -> Selector {
         println!("SEL: {}", selector);
         match selector.as_rule() {
-            Rule::name_selector => Selector::Name {
-                name: selector.as_str().to_owned(), // TODO: decode string
+            Rule::double_quoted => Selector::Name {
+                name: unescape_string(selector.as_str()),
+            },
+            Rule::single_quoted => Selector::Name {
+                name: unescape_string(&selector.as_str().replace("\\'", "'")),
             },
             Rule::wildcard_selector => Selector::Wild,
             Rule::slice_selector => self.parse_slice_selector(selector),
@@ -73,6 +86,10 @@ impl JSONPathParser {
                 index: selector.as_str().parse().unwrap(), // TODO:
             },
             Rule::filter_selector => self.parse_filter_selector(selector),
+            Rule::member_name_shorthand => Selector::Name {
+                // for name_segment
+                name: selector.as_str().to_owned(),
+            },
             _ => unreachable!(),
         }
     }
@@ -104,7 +121,7 @@ impl JSONPathParser {
         }
     }
 
-    // TODO: operator precedence with pest::PrattParser
+    // TODO: operator precedence with pest::PrattParser?
 
     fn parse_logical_or_expression(&self, expr: Pair<Rule>) -> FilterExpression {
         let mut it = expr.into_inner();
@@ -180,19 +197,236 @@ impl JSONPathParser {
     }
 
     fn parse_comparable(&self, expr: Pair<Rule>) -> FilterExpression {
+        println!("COMP: {}", expr);
         match expr.as_rule() {
-            Rule::number => todo!(),
-            Rule::string_literal => todo!(),
-            Rule::true_literal => todo!(),
-            Rule::false_literal => todo!(),
-            Rule::null => todo!(),
+            Rule::number => self.parse_number(expr),
+            Rule::double_quoted => FilterExpression::String {
+                value: unescape_string(expr.as_str()),
+            },
+            Rule::single_quoted => FilterExpression::String {
+                value: unescape_string(&expr.as_str().replace("\\'", "'")),
+            },
+            Rule::true_literal => FilterExpression::True,
+            Rule::false_literal => FilterExpression::False,
+            Rule::null => FilterExpression::Null,
+            Rule::rel_singular_query => FilterExpression::RelativeQuery {
+                query: Box::new(Query {
+                    segments: expr
+                        .into_inner()
+                        .map(|segment| self.parse_segment(segment))
+                        .collect(),
+                }),
+            },
+            Rule::abs_singular_query => FilterExpression::RootQuery {
+                query: Box::new(Query {
+                    segments: expr
+                        .into_inner()
+                        .map(|segment| self.parse_segment(segment))
+                        .collect(),
+                }),
+            },
+            Rule::function_expr => self.parse_function_expression(expr),
             _ => unreachable!(),
         }
     }
 
-    fn parse_test_expression(&self, expr: Pair<Rule>) -> FilterExpression {
-        todo!()
+    fn parse_number(&self, expr: Pair<Rule>) -> FilterExpression {
+        if expr.as_str() == "-0" {
+            return FilterExpression::Int { value: 0 };
+        }
+
+        // TODO: change pest grammar to indicate positive or negative exponent?
+        let mut it = expr.into_inner();
+        let mut is_float = false;
+        let mut n = it.next().unwrap().as_str().to_string(); // int
+
+        if let Some(pair) = it.next() {
+            match pair.as_rule() {
+                Rule::frac => {
+                    is_float = true;
+                    n.push_str(pair.as_str());
+                }
+                Rule::exp => {
+                    let exp_str = pair.as_str();
+                    if exp_str.starts_with('-') {
+                        is_float = true;
+                    }
+                    n.push_str(exp_str);
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        if let Some(pair) = it.next() {
+            let exp_str = pair.as_str();
+            if exp_str.starts_with('-') {
+                is_float = true;
+            }
+            n.push_str(exp_str);
+        }
+
+        if is_float {
+            FilterExpression::Float {
+                value: n.parse::<f64>().unwrap(), // TODO: handle err
+            }
+        } else {
+            FilterExpression::Int {
+                value: n.parse::<f64>().unwrap() as i64, // TODO: handle errs
+            }
+        }
     }
+
+    fn parse_test_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+        println!("TEST: {} -> {}", expr, expr.as_str());
+        let mut it = expr.into_inner();
+        let pair = it.next().unwrap();
+        println!("TEST PAIR: {} -> {}", pair, pair.as_str());
+        match pair.as_rule() {
+            Rule::logical_not_op => FilterExpression::Not {
+                expression: Box::new(self.parse_test_expression_inner(it.next().unwrap())),
+            },
+            _ => self.parse_test_expression_inner(pair),
+        }
+    }
+
+    fn parse_test_expression_inner(&self, expr: Pair<Rule>) -> FilterExpression {
+        match expr.as_rule() {
+            Rule::rel_query => FilterExpression::RelativeQuery {
+                query: Box::new(Query {
+                    segments: expr
+                        .into_inner()
+                        .map(|segment| self.parse_segment(segment))
+                        .collect(),
+                }),
+            },
+            Rule::root_query => FilterExpression::RootQuery {
+                query: Box::new(Query {
+                    segments: expr
+                        .into_inner()
+                        .map(|segment| self.parse_segment(segment))
+                        .collect(),
+                }),
+            },
+            Rule::function_expr => self.parse_function_expression(expr),
+            _ => unreachable!(),
+        }
+    }
+
+    fn parse_function_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+        let mut it = expr.into_inner();
+        let name = it.next().unwrap().as_str();
+        let args = it
+            .map(|ex| self.parse_function_argument(ex))
+            .collect::<Vec<FilterExpression>>();
+
+        // TODO: get function signature for `name`
+        // TODO: validate args
+
+        FilterExpression::Function {
+            name: name.to_string(),
+            args,
+        }
+    }
+
+    fn parse_function_argument(&self, expr: Pair<Rule>) -> FilterExpression {
+        println!("ARG {}", expr);
+        match expr.as_rule() {
+            Rule::number => self.parse_number(expr),
+            Rule::double_quoted => FilterExpression::String {
+                value: unescape_string(expr.as_str()),
+            },
+            Rule::single_quoted => FilterExpression::String {
+                value: unescape_string(&expr.as_str().replace("\\'", "'")),
+            },
+            Rule::true_literal => FilterExpression::True,
+            Rule::false_literal => FilterExpression::False,
+            Rule::null => FilterExpression::Null,
+            Rule::rel_query => FilterExpression::RelativeQuery {
+                query: Box::new(Query {
+                    segments: expr
+                        .into_inner()
+                        .map(|segment| self.parse_segment(segment))
+                        .collect(),
+                }),
+            },
+            Rule::root_query => FilterExpression::RootQuery {
+                query: Box::new(Query {
+                    segments: expr
+                        .into_inner()
+                        .map(|segment| self.parse_segment(segment))
+                        .collect(),
+                }),
+            },
+            Rule::logical_or_expr => self.parse_logical_or_expression(expr),
+            Rule::function_expr => self.parse_function_expression(expr),
+            _ => unreachable!(),
+        }
+    }
+}
+
+fn unescape_string(value: &str) -> String {
+    let chars = value.chars().collect::<Vec<char>>();
+    let length = chars.len();
+    let mut rv = String::new();
+    let mut index: usize = 0;
+
+    while index < length {
+        match chars[index] {
+            '\\' => {
+                index += 1;
+
+                match chars[index] {
+                    '"' => rv.push('"'),
+                    '\\' => rv.push('\\'),
+                    '/' => rv.push('/'),
+                    'b' => rv.push('\x08'),
+                    'f' => rv.push('\x0C'),
+                    'n' => rv.push('\n'),
+                    'r' => rv.push('\r'),
+                    't' => rv.push('\t'),
+                    'u' => {
+                        index += 1;
+
+                        let digits = chars
+                            .get(index..index + 4)
+                            .unwrap()
+                            .iter()
+                            .collect::<String>();
+
+                        let mut codepoint = u32::from_str_radix(&digits, 16).unwrap();
+
+                        if index + 5 < length && chars[index + 4] == '\\' && chars[index + 5] == 'u'
+                        {
+                            let digits = &chars
+                                .get(index + 6..index + 10)
+                                .unwrap()
+                                .iter()
+                                .collect::<String>();
+
+                            let low_surrogate = u32::from_str_radix(digits, 16).unwrap();
+
+                            codepoint =
+                                0x10000 + (((codepoint & 0x03FF) << 10) | (low_surrogate & 0x03FF));
+
+                            index += 6;
+                        }
+
+                        let unescaped = char::from_u32(codepoint).unwrap();
+                        rv.push(unescaped);
+                        index += 3;
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            c => {
+                rv.push(c);
+            }
+        }
+
+        index += 1;
+    }
+
+    rv
 }
 
 #[cfg(test)]

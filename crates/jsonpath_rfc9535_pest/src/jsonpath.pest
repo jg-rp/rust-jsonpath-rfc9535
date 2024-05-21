@@ -18,21 +18,24 @@ selector = _{
   | filter_selector
 }
 
-name_selector = { string_literal }
+name_selector = _{ string_literal }
 
 string_literal = _{
-    ("\x22" ~ double_quoted* ~ "\x22")
-  | ("\x27" ~ single_quoted* ~ "\x27")
+    ("\x22" ~ double_quoted ~ "\x22")
+  | ("\x27" ~ single_quoted ~ "\x27")
 }
 
-double_quoted = {
+double_quoted = { double_quoted_char* }
+single_quoted = { single_quoted_char* }
+
+double_quoted_char = _{
     unescaped
   | "\x27"
   | (ESC ~ "\x22")
   | (ESC ~ escapable)
 }
 
-single_quoted = {
+single_quoted_char = _{
     unescaped
   | "\x22"
   | (ESC ~ "\x27")
@@ -90,15 +93,16 @@ basic_expr = _{
   | test_expr
 }
 
-paren_expr              = { (logical_not_op ~ S)? ~ "(" ~ S ~ logical_expr ~ S ~ ")" }
-logical_not_op          = { "!" }
-test_expr               = { (logical_not_op ~ S)? ~ (filter_query | function_expr) }
-filter_query            = { rel_query | jsonpath_query }
-rel_query               = { current_node_identifier ~ segments }
-current_node_identifier = { "@" }
-comparison_expr         = { comparable ~ S ~ comparison_op ~ S ~ comparable }
+paren_expr              =  { (logical_not_op ~ S)? ~ "(" ~ S ~ logical_expr ~ S ~ ")" }
+logical_not_op          =  { "!" }
+test_expr               =  { (logical_not_op ~ S)? ~ (filter_query | function_expr) }
+filter_query            = _{ rel_query | root_query }
+root_query              =  { jsonpath_query }
+rel_query               =  { current_node_identifier ~ segments }
+current_node_identifier = _{ "@" }
+comparison_expr         =  { comparable ~ S ~ comparison_op ~ S ~ comparable }
 
-literal = {
+literal = _{
     number
   | string_literal
   | true_literal
@@ -121,17 +125,17 @@ comparison_op = {
   | ">"
 }
 
-singular_query          = { rel_singular_query | abs_singular_query }
-rel_singular_query      = { current_node_identifier ~ singular_query_segments }
-abs_singular_query      = { root_identifier ~ singular_query_segments }
-singular_query_segments = { (S ~ (name_segment | index_segment))* }
+singular_query          = _{ rel_singular_query | abs_singular_query }
+rel_singular_query      =  { current_node_identifier ~ singular_query_segments }
+abs_singular_query      =  { root_identifier ~ singular_query_segments }
+singular_query_segments = _{ (S ~ (name_segment | index_segment))* }
 
 name_segment = {
     ("[" ~ name_selector ~ "]")
   | ("." ~ member_name_shorthand)
 }
 
-index_segment       = _{ "[" ~ index_selector ~ "]" }
+index_segment       =  { "[" ~ index_selector ~ "]" }
 number              =  { (int | "-0") ~ frac? ~ exp? }
 frac                =  { "." ~ ASCII_DIGIT+ }
 exp                 =  { ^"e" ~ ("-" | "+")? ~ ASCII_DIGIT+ }
@@ -139,14 +143,14 @@ true_literal        =  { "true" }
 false_literal       =  { "false" }
 null                =  { "null" }
 function_name       =  { function_name_first ~ function_name_char* }
-function_name_first =  { ASCII_ALPHA_LOWER }
-function_name_char  =  { function_name_first | "_" | ASCII_DIGIT }
+function_name_first = _{ ASCII_ALPHA_LOWER }
+function_name_char  = _{ function_name_first | "_" | ASCII_DIGIT }
 
 function_expr = {
     function_name ~ "(" ~ S ~ (function_argument ~ (S ~ "," ~ S ~ function_argument)*)? ~ S ~ ")"
 }
 
-function_argument = {
+function_argument = _{
     literal
   | filter_query
   | logical_expr
