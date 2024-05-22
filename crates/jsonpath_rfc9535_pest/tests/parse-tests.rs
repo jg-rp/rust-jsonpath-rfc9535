@@ -1,4 +1,4 @@
-use jsonpath_rfc9535_pest::{errors::JSONPathError, parser::JSONPathParser};
+use jsonpath_rfc9535_pest::{ast::Query, errors::JSONPathError};
 
 macro_rules! parse_tests {
     ($($name:ident: $value:expr,)*) => {
@@ -8,7 +8,7 @@ macro_rules! parse_tests {
             #[test]
             fn $name() -> Result<(), JSONPathError> {
                 let (input, expected) = $value;
-                let query = JSONPathParser::new().parse(input)?;
+                let query = Query::standard(input)?;
                 assert_eq!(format!("{}", query), expected);
                 Ok(())
             }

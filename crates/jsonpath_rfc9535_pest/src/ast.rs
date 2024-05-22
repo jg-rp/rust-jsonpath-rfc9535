@@ -64,6 +64,7 @@ impl fmt::Display for Query {
 pub enum Segment {
     Child { selectors: Vec<Selector> },
     Recursive { selectors: Vec<Selector> },
+    Eoi,
 }
 
 impl fmt::Display for Segment {
@@ -91,6 +92,7 @@ impl fmt::Display for Segment {
                         .join(", ")
                 )
             }
+            Segment::Eoi => Ok(()),
         }
     }
 }

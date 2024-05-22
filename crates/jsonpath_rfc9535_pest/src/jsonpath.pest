@@ -1,6 +1,4 @@
-jsonpath = _{ SOI ~ jsonpath_query ~ eoi }
-// TODO: does silencing eoi (rather than using EOI) effect error reporting?
-eoi = _{ !ANY }
+jsonpath = _{ SOI ~ jsonpath_query ~ EOI }
 
 jsonpath_query = _{ root_identifier ~ segments }
 segments       = _{ (S ~ segment)* }
@@ -167,8 +165,7 @@ child_segment = {
   | ("." ~ (wildcard_selector | member_name_shorthand))
 }
 
-bracketed_selection = { "[" ~ S ~ selector ~ (S ~ "," ~ S ~ selector)* ~ S ~ "]" }
-
+bracketed_selection   = { "[" ~ S ~ selector ~ (S ~ "," ~ S ~ selector)* ~ S ~ "]" }
 member_name_shorthand = { name_first ~ name_char* }
 
 name_first = _{

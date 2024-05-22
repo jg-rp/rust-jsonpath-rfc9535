@@ -17,7 +17,7 @@ use crate::{
 
 #[derive(Parser)]
 #[grammar = "jsonpath.pest"]
-pub struct JSONPath;
+struct JSONPath;
 
 pub enum ExpressionType {
     Logical,
@@ -117,6 +117,7 @@ impl JSONPathParser {
             Rule::name_segment | Rule::index_segment => Segment::Child {
                 selectors: vec![self.parse_selector(segment.into_inner().next().unwrap())?],
             },
+            Rule::EOI => Segment::Eoi,
             _ => unreachable!(),
         })
     }

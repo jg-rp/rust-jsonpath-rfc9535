@@ -1,9 +1,8 @@
-use jsonpath_rfc9535_pest::parser::JSONPathParser;
+use jsonpath_rfc9535_pest::Query;
 
 fn main() {
-    let parser = JSONPathParser::new();
-    let rv = parser.parse("$[?@.foo == 'thing' && match(@.bar, 'baz')]");
-    match rv {
+    let q = "$[?@.foo == 'thing' && match(@.bar, 'baz')]";
+    match Query::standard(q) {
         Err(err) => print!("{}", err.msg),
         Ok(query) => println!("{}", query),
     }
