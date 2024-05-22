@@ -5,6 +5,8 @@
 //! [pest]: https://pest.rs/
 //! [pest book]: https://pest.rs/book/
 
+use std::{collections::HashMap, ops::RangeInclusive};
+
 use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 
@@ -17,7 +19,67 @@ use crate::{
 #[grammar = "jsonpath.pest"]
 pub struct JSONPath;
 
-pub struct JSONPathParser;
+pub enum ExpressionType {
+    Logical,
+    Nodes,
+    Value,
+}
+
+pub struct FunctionSignature {
+    pub param_types: Vec<ExpressionType>,
+    pub return_type: ExpressionType,
+}
+
+pub fn standard_functions() -> HashMap<String, FunctionSignature> {
+    let mut functions = HashMap::new();
+
+    functions.insert(
+        "count".to_owned(),
+        FunctionSignature {
+            param_types: vec![ExpressionType::Nodes],
+            return_type: ExpressionType::Value,
+        },
+    );
+
+    functions.insert(
+        "length".to_owned(),
+        FunctionSignature {
+            param_types: vec![ExpressionType::Value],
+            return_type: ExpressionType::Value,
+        },
+    );
+
+    functions.insert(
+        "match".to_owned(),
+        FunctionSignature {
+            param_types: vec![ExpressionType::Value, ExpressionType::Value],
+            return_type: ExpressionType::Logical,
+        },
+    );
+
+    functions.insert(
+        "search".to_owned(),
+        FunctionSignature {
+            param_types: vec![ExpressionType::Value, ExpressionType::Value],
+            return_type: ExpressionType::Logical,
+        },
+    );
+
+    functions.insert(
+        "value".to_owned(),
+        FunctionSignature {
+            param_types: vec![ExpressionType::Nodes],
+            return_type: ExpressionType::Value,
+        },
+    );
+
+    functions
+}
+
+pub struct JSONPathParser {
+    pub index_range: RangeInclusive<i64>,
+    pub functions: HashMap<String, FunctionSignature>,
+}
 
 impl Default for JSONPathParser {
     fn default() -> Self {
@@ -27,50 +89,58 @@ impl Default for JSONPathParser {
 
 impl JSONPathParser {
     pub fn new() -> Self {
-        JSONPathParser {}
-    }
-
-    pub fn parse(&self, query: &str) -> Result<Query, JSONPathError> {
-        Ok(Query {
-            segments: JSONPath::parse(Rule::jsonpath, query)
-                .map_err(|err| JSONPathError::syntax(err.to_string()))?
-                .map(|segment| self.parse_segment(segment))
-                .collect(),
-        })
-    }
-
-    fn parse_segment(&self, segment: Pair<Rule>) -> Segment {
-        match segment.as_rule() {
-            Rule::child_segment => Segment::Child {
-                selectors: self.parse_segment_inner(segment.into_inner().next().unwrap()),
-            },
-            Rule::descendant_segment => Segment::Recursive {
-                selectors: self.parse_segment_inner(segment.into_inner().next().unwrap()),
-            },
-            Rule::name_segment | Rule::index_segment => Segment::Child {
-                selectors: vec![self.parse_selector(segment.into_inner().next().unwrap())],
-            },
-            _ => unreachable!(),
+        JSONPathParser {
+            index_range: ((-2_i64).pow(53) + 1..=2_i64.pow(53) - 1),
+            functions: standard_functions(),
         }
     }
 
-    fn parse_segment_inner(&self, segment: Pair<Rule>) -> Vec<Selector> {
-        match segment.as_rule() {
-            Rule::bracketed_selection => segment
-                .into_inner()
-                .map(|selector| self.parse_selector(selector))
-                .collect(),
+    pub fn parse(&self, query: &str) -> Result<Query, JSONPathError> {
+        let segments: Result<Vec<_>, _> = JSONPath::parse(Rule::jsonpath, query)
+            .map_err(|err| JSONPathError::syntax(err.to_string()))?
+            .map(|segment| self.parse_segment(segment))
+            .collect();
+
+        Ok(Query {
+            segments: segments?,
+        })
+    }
+
+    fn parse_segment(&self, segment: Pair<Rule>) -> Result<Segment, JSONPathError> {
+        Ok(match segment.as_rule() {
+            Rule::child_segment => Segment::Child {
+                selectors: self.parse_segment_inner(segment.into_inner().next().unwrap())?,
+            },
+            Rule::descendant_segment => Segment::Recursive {
+                selectors: self.parse_segment_inner(segment.into_inner().next().unwrap())?,
+            },
+            Rule::name_segment | Rule::index_segment => Segment::Child {
+                selectors: vec![self.parse_selector(segment.into_inner().next().unwrap())?],
+            },
+            _ => unreachable!(),
+        })
+    }
+
+    fn parse_segment_inner(&self, segment: Pair<Rule>) -> Result<Vec<Selector>, JSONPathError> {
+        Ok(match segment.as_rule() {
+            Rule::bracketed_selection => {
+                let seg: Result<Vec<_>, _> = segment
+                    .into_inner()
+                    .map(|selector| self.parse_selector(selector))
+                    .collect();
+                seg?
+            }
             Rule::wildcard_selector => vec![Selector::Wild],
             Rule::member_name_shorthand => vec![Selector::Name {
                 // for child_segment
                 name: segment.as_str().to_owned(),
             }],
             _ => unreachable!(),
-        }
+        })
     }
 
-    fn parse_selector(&self, selector: Pair<Rule>) -> Selector {
-        match selector.as_rule() {
+    fn parse_selector(&self, selector: Pair<Rule>) -> Result<Selector, JSONPathError> {
+        Ok(match selector.as_rule() {
             Rule::double_quoted => Selector::Name {
                 name: unescape_string(selector.as_str()),
             },
@@ -78,77 +148,81 @@ impl JSONPathParser {
                 name: unescape_string(&selector.as_str().replace("\\'", "'")),
             },
             Rule::wildcard_selector => Selector::Wild,
-            Rule::slice_selector => self.parse_slice_selector(selector),
+            Rule::slice_selector => self.parse_slice_selector(selector)?,
             Rule::index_selector => Selector::Index {
-                index: selector.as_str().parse().unwrap(), // TODO:
+                index: self.parse_i_json_int(selector.as_str())?,
             },
-            Rule::filter_selector => self.parse_filter_selector(selector),
+            Rule::filter_selector => self.parse_filter_selector(selector)?,
             Rule::member_name_shorthand => Selector::Name {
                 // for name_segment
                 name: selector.as_str().to_owned(),
             },
             _ => unreachable!(),
-        }
+        })
     }
 
-    fn parse_slice_selector(&self, selector: Pair<Rule>) -> Selector {
+    fn parse_slice_selector(&self, selector: Pair<Rule>) -> Result<Selector, JSONPathError> {
         let mut start: Option<i64> = None;
         let mut stop: Option<i64> = None;
         let mut step: Option<i64> = None;
 
         for i in selector.into_inner() {
             match i.as_rule() {
-                Rule::start => start = Some(i.as_str().parse().unwrap()), // TODO:
-                Rule::stop => stop = Some(i.as_str().parse().unwrap()),   // TODO:
-                Rule::step => step = Some(i.as_str().parse().unwrap()),   // TODO:
+                Rule::start => start = Some(self.parse_i_json_int(i.as_str())?),
+                Rule::stop => stop = Some(self.parse_i_json_int(i.as_str())?),
+                Rule::step => step = Some(self.parse_i_json_int(i.as_str())?),
                 _ => unreachable!(),
             }
         }
 
-        Selector::Slice { start, stop, step }
+        Ok(Selector::Slice { start, stop, step })
     }
 
-    fn parse_filter_selector(&self, selector: Pair<Rule>) -> Selector {
-        Selector::Filter {
+    fn parse_filter_selector(&self, selector: Pair<Rule>) -> Result<Selector, JSONPathError> {
+        Ok(Selector::Filter {
             expression: Box::new(
-                self.parse_logical_or_expression(selector.into_inner().next().unwrap()),
+                self.parse_logical_or_expression(selector.into_inner().next().unwrap())?,
             ),
-        }
+        })
     }
 
-    // TODO: operator precedence with pest::PrattParser?
-
-    fn parse_logical_or_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+    fn parse_logical_or_expression(
+        &self,
+        expr: Pair<Rule>,
+    ) -> Result<FilterExpression, JSONPathError> {
         let mut it = expr.into_inner();
-        let mut or_expr = self.parse_logical_and_expression(it.next().unwrap());
+        let mut or_expr = self.parse_logical_and_expression(it.next().unwrap())?;
 
         for and_expr in it {
             or_expr = FilterExpression::Logical {
                 left: Box::new(or_expr),
                 operator: LogicalOperator::Or,
-                right: Box::new(self.parse_logical_and_expression(and_expr)),
+                right: Box::new(self.parse_logical_and_expression(and_expr)?),
             };
         }
 
-        or_expr
+        Ok(or_expr)
     }
 
-    fn parse_logical_and_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+    fn parse_logical_and_expression(
+        &self,
+        expr: Pair<Rule>,
+    ) -> Result<FilterExpression, JSONPathError> {
         let mut it = expr.into_inner();
-        let mut and_expr = self.parse_basic_expression(it.next().unwrap());
+        let mut and_expr = self.parse_basic_expression(it.next().unwrap())?;
 
         for basic_expr in it {
             and_expr = FilterExpression::Logical {
                 left: Box::new(and_expr),
                 operator: LogicalOperator::And,
-                right: Box::new(self.parse_basic_expression(basic_expr)),
+                right: Box::new(self.parse_basic_expression(basic_expr)?),
             };
         }
 
-        and_expr
+        Ok(and_expr)
     }
 
-    fn parse_basic_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+    fn parse_basic_expression(&self, expr: Pair<Rule>) -> Result<FilterExpression, JSONPathError> {
         match expr.as_rule() {
             Rule::paren_expr => self.parse_paren_expression(expr),
             Rule::comparison_expr => self.parse_comparison_expression(expr),
@@ -157,21 +231,24 @@ impl JSONPathParser {
         }
     }
 
-    fn parse_paren_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+    fn parse_paren_expression(&self, expr: Pair<Rule>) -> Result<FilterExpression, JSONPathError> {
         let mut it = expr.into_inner();
         let p = it.next().unwrap();
         match p.as_rule() {
-            Rule::logical_not_op => FilterExpression::Not {
-                expression: Box::new(self.parse_logical_or_expression(it.next().unwrap())),
-            },
+            Rule::logical_not_op => Ok(FilterExpression::Not {
+                expression: Box::new(self.parse_logical_or_expression(it.next().unwrap())?),
+            }),
             Rule::logical_or_expr => self.parse_logical_or_expression(p),
             _ => unreachable!(),
         }
     }
 
-    fn parse_comparison_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+    fn parse_comparison_expression(
+        &self,
+        expr: Pair<Rule>,
+    ) -> Result<FilterExpression, JSONPathError> {
         let mut it = expr.into_inner();
-        let left = self.parse_comparable(it.next().unwrap());
+        let left = self.parse_comparable(it.next().unwrap())?;
 
         let operator = match it.next().unwrap().as_str() {
             "==" => ComparisonOperator::Eq,
@@ -183,17 +260,20 @@ impl JSONPathParser {
             _ => unreachable!(),
         };
 
-        let right = self.parse_comparable(it.next().unwrap());
-        FilterExpression::Comparison {
+        let right = self.parse_comparable(it.next().unwrap())?;
+        self.assert_comparable(&left)?;
+        self.assert_comparable(&right)?;
+
+        Ok(FilterExpression::Comparison {
             left: Box::new(left),
             operator,
             right: Box::new(right),
-        }
+        })
     }
 
-    fn parse_comparable(&self, expr: Pair<Rule>) -> FilterExpression {
-        match expr.as_rule() {
-            Rule::number => self.parse_number(expr),
+    fn parse_comparable(&self, expr: Pair<Rule>) -> Result<FilterExpression, JSONPathError> {
+        Ok(match expr.as_rule() {
+            Rule::number => self.parse_number(expr)?,
             Rule::double_quoted => FilterExpression::String {
                 value: unescape_string(expr.as_str()),
             },
@@ -203,30 +283,38 @@ impl JSONPathParser {
             Rule::true_literal => FilterExpression::True,
             Rule::false_literal => FilterExpression::False,
             Rule::null => FilterExpression::Null,
-            Rule::rel_singular_query => FilterExpression::RelativeQuery {
-                query: Box::new(Query {
-                    segments: expr
-                        .into_inner()
-                        .map(|segment| self.parse_segment(segment))
-                        .collect(),
-                }),
-            },
-            Rule::abs_singular_query => FilterExpression::RootQuery {
-                query: Box::new(Query {
-                    segments: expr
-                        .into_inner()
-                        .map(|segment| self.parse_segment(segment))
-                        .collect(),
-                }),
-            },
-            Rule::function_expr => self.parse_function_expression(expr),
+            Rule::rel_singular_query => {
+                let segments: Result<Vec<_>, _> = expr
+                    .into_inner()
+                    .map(|segment| self.parse_segment(segment))
+                    .collect();
+
+                FilterExpression::RelativeQuery {
+                    query: Box::new(Query {
+                        segments: segments?,
+                    }),
+                }
+            }
+            Rule::abs_singular_query => {
+                let segments: Result<Vec<_>, _> = expr
+                    .into_inner()
+                    .map(|segment| self.parse_segment(segment))
+                    .collect();
+
+                FilterExpression::RootQuery {
+                    query: Box::new(Query {
+                        segments: segments?,
+                    }),
+                }
+            }
+            Rule::function_expr => self.parse_function_expression(expr)?,
             _ => unreachable!(),
-        }
+        })
     }
 
-    fn parse_number(&self, expr: Pair<Rule>) -> FilterExpression {
+    fn parse_number(&self, expr: Pair<Rule>) -> Result<FilterExpression, JSONPathError> {
         if expr.as_str() == "-0" {
-            return FilterExpression::Int { value: 0 };
+            return Ok(FilterExpression::Int { value: 0 });
         }
 
         // TODO: change pest grammar to indicate positive or negative exponent?
@@ -260,69 +348,83 @@ impl JSONPathParser {
         }
 
         if is_float {
-            FilterExpression::Float {
-                value: n.parse::<f64>().unwrap(), // TODO: handle err
-            }
+            Ok(FilterExpression::Float {
+                value: n
+                    .parse::<f64>()
+                    .map_err(|_| JSONPathError::syntax(String::from("invalid float literal")))?,
+            })
         } else {
-            FilterExpression::Int {
-                value: n.parse::<f64>().unwrap() as i64, // TODO: handle errs
-            }
+            Ok(FilterExpression::Int {
+                value: n
+                    .parse::<f64>()
+                    .map_err(|_| JSONPathError::syntax(String::from("invalid integer literal")))?
+                    as i64,
+            })
         }
     }
 
-    fn parse_test_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+    fn parse_test_expression(&self, expr: Pair<Rule>) -> Result<FilterExpression, JSONPathError> {
         let mut it = expr.into_inner();
         let pair = it.next().unwrap();
-        match pair.as_rule() {
+        Ok(match pair.as_rule() {
             Rule::logical_not_op => FilterExpression::Not {
-                expression: Box::new(self.parse_test_expression_inner(it.next().unwrap())),
+                expression: Box::new(self.parse_test_expression_inner(it.next().unwrap())?),
             },
-            _ => self.parse_test_expression_inner(pair),
-        }
+            _ => self.parse_test_expression_inner(pair)?,
+        })
     }
 
-    fn parse_test_expression_inner(&self, expr: Pair<Rule>) -> FilterExpression {
-        match expr.as_rule() {
-            Rule::rel_query => FilterExpression::RelativeQuery {
-                query: Box::new(Query {
-                    segments: expr
-                        .into_inner()
-                        .map(|segment| self.parse_segment(segment))
-                        .collect(),
-                }),
-            },
-            Rule::root_query => FilterExpression::RootQuery {
-                query: Box::new(Query {
-                    segments: expr
-                        .into_inner()
-                        .map(|segment| self.parse_segment(segment))
-                        .collect(),
-                }),
-            },
-            Rule::function_expr => self.parse_function_expression(expr),
+    fn parse_test_expression_inner(
+        &self,
+        expr: Pair<Rule>,
+    ) -> Result<FilterExpression, JSONPathError> {
+        Ok(match expr.as_rule() {
+            Rule::rel_query => {
+                let segments: Result<Vec<_>, _> = expr
+                    .into_inner()
+                    .map(|segment| self.parse_segment(segment))
+                    .collect();
+
+                FilterExpression::RelativeQuery {
+                    query: Box::new(Query {
+                        segments: segments?,
+                    }),
+                }
+            }
+            Rule::root_query => {
+                let segments: Result<Vec<_>, _> = expr
+                    .into_inner()
+                    .map(|segment| self.parse_segment(segment))
+                    .collect();
+
+                FilterExpression::RootQuery {
+                    query: Box::new(Query {
+                        segments: segments?,
+                    }),
+                }
+            }
+            Rule::function_expr => self.parse_function_expression(expr)?,
             _ => unreachable!(),
-        }
+        })
     }
 
-    fn parse_function_expression(&self, expr: Pair<Rule>) -> FilterExpression {
+    fn parse_function_expression(
+        &self,
+        expr: Pair<Rule>,
+    ) -> Result<FilterExpression, JSONPathError> {
         let mut it = expr.into_inner();
         let name = it.next().unwrap().as_str();
-        let args = it
-            .map(|ex| self.parse_function_argument(ex))
-            .collect::<Vec<FilterExpression>>();
+        let args: Result<Vec<_>, _> = it.map(|ex| self.parse_function_argument(ex)).collect();
 
-        // TODO: get function signature for `name`
-        // TODO: validate args
-
-        FilterExpression::Function {
+        Ok(FilterExpression::Function {
             name: name.to_string(),
-            args,
-        }
+            args: self.assert_well_typed(name, args?)?,
+        })
     }
 
-    fn parse_function_argument(&self, expr: Pair<Rule>) -> FilterExpression {
-        match expr.as_rule() {
-            Rule::number => self.parse_number(expr),
+    fn parse_function_argument(&self, expr: Pair<Rule>) -> Result<FilterExpression, JSONPathError> {
+        Ok(match expr.as_rule() {
+            Rule::number => self.parse_number(expr)?,
             Rule::double_quoted => FilterExpression::String {
                 value: unescape_string(expr.as_str()),
             },
@@ -332,25 +434,189 @@ impl JSONPathParser {
             Rule::true_literal => FilterExpression::True,
             Rule::false_literal => FilterExpression::False,
             Rule::null => FilterExpression::Null,
-            Rule::rel_query => FilterExpression::RelativeQuery {
-                query: Box::new(Query {
-                    segments: expr
-                        .into_inner()
-                        .map(|segment| self.parse_segment(segment))
-                        .collect(),
-                }),
-            },
-            Rule::root_query => FilterExpression::RootQuery {
-                query: Box::new(Query {
-                    segments: expr
-                        .into_inner()
-                        .map(|segment| self.parse_segment(segment))
-                        .collect(),
-                }),
-            },
-            Rule::logical_or_expr => self.parse_logical_or_expression(expr),
-            Rule::function_expr => self.parse_function_expression(expr),
+            Rule::rel_query => {
+                let segments: Result<Vec<_>, _> = expr
+                    .into_inner()
+                    .map(|segment| self.parse_segment(segment))
+                    .collect();
+
+                FilterExpression::RelativeQuery {
+                    query: Box::new(Query {
+                        segments: segments?,
+                    }),
+                }
+            }
+            Rule::root_query => {
+                let segments: Result<Vec<_>, _> = expr
+                    .into_inner()
+                    .map(|segment| self.parse_segment(segment))
+                    .collect();
+
+                FilterExpression::RootQuery {
+                    query: Box::new(Query {
+                        segments: segments?,
+                    }),
+                }
+            }
+            Rule::logical_or_expr => self.parse_logical_or_expression(expr)?,
+            Rule::function_expr => self.parse_function_expression(expr)?,
             _ => unreachable!(),
+        })
+    }
+
+    fn parse_i_json_int(&self, value: &str) -> Result<i64, JSONPathError> {
+        let i = value
+            .parse::<i64>()
+            .map_err(|_| JSONPathError::syntax(format!("index out of range `{}`", value)))?;
+
+        if !self.index_range.contains(&i) {
+            return Err(JSONPathError::syntax(format!(
+                "index out of range `{}`",
+                value
+            )));
+        }
+
+        Ok(i)
+    }
+    fn assert_comparable(&self, expr: &FilterExpression) -> Result<(), JSONPathError> {
+        // TODO: accept span/position for better errors
+        match expr {
+            FilterExpression::RelativeQuery { query, .. }
+            | FilterExpression::RootQuery { query, .. } => {
+                if !query.is_singular() {
+                    Err(JSONPathError::typ(String::from(
+                        "non-singular query is not comparable",
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
+            FilterExpression::Function { name, .. } => {
+                if let Some(FunctionSignature {
+                    return_type: ExpressionType::Value,
+                    ..
+                }) = self.functions.get(name)
+                {
+                    Ok(())
+                } else {
+                    Err(JSONPathError::typ(format!(
+                        "result of {}() is not comparable",
+                        name
+                    )))
+                }
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn assert_well_typed(
+        &self,
+        func_name: &str,
+        args: Vec<FilterExpression>,
+    ) -> Result<Vec<FilterExpression>, JSONPathError> {
+        // TODO: accept span/position for better errors
+        let signature = self
+            .functions
+            .get(func_name)
+            .ok_or_else(|| JSONPathError::name(format!("unknown function `{}`", func_name)))?;
+
+        // correct number of arguments?
+        if args.len() != signature.param_types.len() {
+            return Err(JSONPathError::typ(format!(
+                "{}() takes {} argument{} but {} were given",
+                func_name,
+                signature.param_types.len(),
+                if signature.param_types.len() > 1 {
+                    "s"
+                } else {
+                    ""
+                },
+                args.len()
+            )));
+        }
+
+        // correct argument types?
+        for (idx, typ) in signature.param_types.iter().enumerate() {
+            let arg = &args[idx];
+            match typ {
+                ExpressionType::Value => {
+                    if !self.is_value_type(arg) {
+                        return Err(JSONPathError::typ(format!(
+                            "argument {} of {}() must be of a 'Value' type",
+                            idx + 1,
+                            func_name
+                        )));
+                    }
+                }
+                ExpressionType::Logical => {
+                    if !matches!(
+                        arg,
+                        FilterExpression::RelativeQuery { .. }
+                            | FilterExpression::RootQuery { .. }
+                            | FilterExpression::Logical { .. }
+                            | FilterExpression::Comparison { .. },
+                    ) {
+                        return Err(JSONPathError::typ(format!(
+                            "argument {} of {}() must be of a 'Logical' type",
+                            idx + 1,
+                            func_name
+                        )));
+                    }
+                }
+                ExpressionType::Nodes => {
+                    if !self.is_nodes_type(arg) {
+                        return Err(JSONPathError::typ(format!(
+                            "argument {} of {}() must be of a 'Nodes' type",
+                            idx + 1,
+                            func_name
+                        )));
+                    }
+                }
+            }
+        }
+
+        Ok(args)
+    }
+
+    fn is_value_type(&self, expr: &FilterExpression) -> bool {
+        // literals are values
+        if expr.is_literal() {
+            return true;
+        }
+
+        match expr {
+            FilterExpression::RelativeQuery { query, .. }
+            | FilterExpression::RootQuery { query, .. } => {
+                // singular queries will be coerced to a value
+                query.is_singular()
+            }
+            FilterExpression::Function { name, .. } => {
+                // some functions return a value
+                matches!(
+                    self.functions.get(name),
+                    Some(FunctionSignature {
+                        return_type: ExpressionType::Value,
+                        ..
+                    })
+                )
+            }
+            _ => false,
+        }
+    }
+
+    fn is_nodes_type(&self, expr: &FilterExpression) -> bool {
+        match expr {
+            FilterExpression::RelativeQuery { .. } | FilterExpression::RootQuery { .. } => true,
+            FilterExpression::Function { name, .. } => {
+                matches!(
+                    self.functions.get(name),
+                    Some(FunctionSignature {
+                        return_type: ExpressionType::Nodes,
+                        ..
+                    })
+                )
+            }
+            _ => false,
         }
     }
 }
