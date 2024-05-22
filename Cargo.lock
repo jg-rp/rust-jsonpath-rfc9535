@@ -67,6 +67,7 @@ dependencies = [
 name = "jsonpath_rfc9535_pest"
 version = "0.1.0"
 dependencies = [
+ "lazy_static",
  "pest",
  "pest_derive",
 ]

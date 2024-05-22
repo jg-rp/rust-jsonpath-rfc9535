@@ -107,7 +107,9 @@ TODO:
 
 ## Performance
 
-TODO: performance comparison between pest-based and hand-crafted parsers.
+Without attempting to optimize the grammar, the pest-based parser benchmarks at 164,385 ns/iter, vs 74,718 ns/iter for the hand-crafted parser.
+
+The pest parser does _feel_ nicer than the hand-crafted parser, and this performance difference might prove to be insignificant when Python binding overhead is taken into account.
 
 ## Contributing
 
