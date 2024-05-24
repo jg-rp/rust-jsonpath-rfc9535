@@ -182,7 +182,7 @@ impl JSONPathParser {
     fn parse_filter_selector(&self, selector: Pair<Rule>) -> Result<Selector, JSONPathError> {
         Ok(Selector::Filter {
             expression: Box::new(
-                self.parse_logical_or_expression(selector.into_inner().next().unwrap())?,
+                self.parse_logical_or_expression(selector.into_inner().next().unwrap(), true)?,
             ),
         })
     }
@@ -190,15 +190,24 @@ impl JSONPathParser {
     fn parse_logical_or_expression(
         &self,
         expr: Pair<Rule>,
+        assert_compared: bool,
     ) -> Result<FilterExpression, JSONPathError> {
         let mut it = expr.into_inner();
-        let mut or_expr = self.parse_logical_and_expression(it.next().unwrap())?;
+        let mut or_expr = self.parse_logical_and_expression(it.next().unwrap(), assert_compared)?;
+
+        if assert_compared {
+            self.assert_compared(&or_expr)?;
+        }
 
         for and_expr in it {
+            let right = self.parse_logical_and_expression(and_expr, assert_compared)?;
+            if assert_compared {
+                self.assert_compared(&right)?;
+            }
             or_expr = FilterExpression::Logical {
                 left: Box::new(or_expr),
                 operator: LogicalOperator::Or,
-                right: Box::new(self.parse_logical_and_expression(and_expr)?),
+                right: Box::new(right),
             };
         }
 
@@ -208,15 +217,26 @@ impl JSONPathParser {
     fn parse_logical_and_expression(
         &self,
         expr: Pair<Rule>,
+        assert_compared: bool,
     ) -> Result<FilterExpression, JSONPathError> {
         let mut it = expr.into_inner();
         let mut and_expr = self.parse_basic_expression(it.next().unwrap())?;
 
+        if assert_compared {
+            self.assert_compared(&and_expr)?;
+        }
+
         for basic_expr in it {
+            let right = self.parse_basic_expression(basic_expr)?;
+
+            if assert_compared {
+                self.assert_compared(&right)?;
+            }
+
             and_expr = FilterExpression::Logical {
                 left: Box::new(and_expr),
                 operator: LogicalOperator::And,
-                right: Box::new(self.parse_basic_expression(basic_expr)?),
+                right: Box::new(right),
             };
         }
 
@@ -237,9 +257,9 @@ impl JSONPathParser {
         let p = it.next().unwrap();
         match p.as_rule() {
             Rule::logical_not_op => Ok(FilterExpression::Not {
-                expression: Box::new(self.parse_logical_or_expression(it.next().unwrap())?),
+                expression: Box::new(self.parse_logical_or_expression(it.next().unwrap(), true)?),
             }),
-            Rule::logical_or_expr => self.parse_logical_or_expression(p),
+            Rule::logical_or_expr => self.parse_logical_or_expression(p, true),
             _ => unreachable!(),
         }
     }
@@ -459,7 +479,7 @@ impl JSONPathParser {
                     }),
                 }
             }
-            Rule::logical_or_expr => self.parse_logical_or_expression(expr)?,
+            Rule::logical_or_expr => self.parse_logical_or_expression(expr, false)?,
             Rule::function_expr => self.parse_function_expression(expr)?,
             _ => unreachable!(),
         })
@@ -504,6 +524,26 @@ impl JSONPathParser {
                         "result of {}() is not comparable",
                         name
                     )))
+                }
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn assert_compared(&self, expr: &FilterExpression) -> Result<(), JSONPathError> {
+        match expr {
+            FilterExpression::Function { name, .. } => {
+                if let Some(FunctionSignature {
+                    return_type: ExpressionType::Value,
+                    ..
+                }) = self.functions.get(name)
+                {
+                    Err(JSONPathError::typ(format!(
+                        "result of {}() must be compared",
+                        name
+                    )))
+                } else {
+                    Ok(())
                 }
             }
             _ => Ok(()),

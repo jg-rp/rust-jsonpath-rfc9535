@@ -149,10 +149,10 @@ function_expr = {
 }
 
 function_argument = _{
-    literal
-  | filter_query
+    filter_query
   | logical_expr
   | function_expr
+  | literal
 }
 
 segment = _{
