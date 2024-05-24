@@ -105,11 +105,11 @@ Error: JSONPathError { kind: NameError, msg: "unknown function `foo`", span: (8,
 
 TODO:
 
-## Performance
+## Performance Notes
 
 Without attempting to optimize the grammar, the pest-based parser benchmarks at 164,385 ns/iter, vs 74,718 ns/iter for the hand-crafted parser.
 
-The pest parser does _feel_ nicer than the hand-crafted parser, and this performance difference might prove to be insignificant when Python binding overhead is taken into account.
+When benchmarking [JPQ](https://github.com/jg-rp/jpq) with the pest parser, this translates to a slowdown of between 0.03 and 0.04 seconds (409 queries repeated 100 times) during the compile phase. This seems like a good tradeoff.
 
 ## Contributing
 
