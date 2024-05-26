@@ -4,7 +4,7 @@ Three different JSONPath expression parsers producing a JSON implementation agno
 
 - `crates/jsonpath_rfc9535` is a hand-crafted lexer and parser for JSONPath.
 - `crates/jsonpath_rfc9535_pest` is a [pest](https://github.com/pest-parser)-based JSONPath parser, producing a similar AST to the hand-crafted parser.
-- `crates/jsonpath_rfc9535_pest_recursive` is the pest parser producing an AST structured with recursive segments rather than a vector of segments. This structure is inspired by the stalled (jsonpath-reference-implementation)[https://github.com/jsonpath-standard/jsonpath-reference-implementation], and lends itself more easily to an iterator interface.
+- `crates/jsonpath_rfc9535_pest_recursive` is the pest parser producing an AST structured with recursive segments rather than a vector of segments. This structure is inspired by the stalled [jsonpath-reference-implementation](https://github.com/jsonpath-standard/jsonpath-reference-implementation), and lends itself more easily to an iterator interface.
 
 Both were written with Python bindings in mind and forked into [JPQ](https://github.com/jg-rp/jpq). They are now kept here for reference and to compare performance between the two lexing/parsing approaches.
 
