@@ -1,4 +1,4 @@
-name: jsonpath_pest
+name: jsonpath_pest_recursive
 
 on:
   push:
@@ -16,6 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: cargo build -p jsonpath_rfc9535_pest --verbose
+        run: cargo build -p jsonpath_rfc9535_pest_recursive --verbose
       - name: Run tests
-        run: cargo test -p jsonpath_rfc9535_pest --verbose
+        run: cargo test -p jsonpath_rfc9535_pest_recursive --verbose

@@ -1,9 +1,10 @@
 # Rust JSONPath RFC 9535
 
-Two different JSONPath expression parsers producing a JSON implementation agnostic abstract syntax tree, following the JSONPath model described in RFC 9535.
+Three different JSONPath expression parsers producing a JSON implementation agnostic abstract syntax tree, following the JSONPath model described in RFC 9535.
 
-- `crates/jsonpath_rfc9535_pest` (WIP) is a [pest](https://github.com/pest-parser)-based JSONPath parser.
 - `crates/jsonpath_rfc9535` is a hand-crafted lexer and parser for JSONPath.
+- `crates/jsonpath_rfc9535_pest` is a [pest](https://github.com/pest-parser)-based JSONPath parser, producing a similar AST to `crates/jsonpath_rfc9535`.
+- `crates/jsonpath_rfc9535_pest_recursive` is the pest parser producing an AST structured with recursive segments rather than a vector of segments. This structure is inspired by the stalled (jsonpath-reference-implementation)[https://github.com/jsonpath-standard/jsonpath-reference-implementation], and lends itself more easily to an iterator interface.
 
 Both were written with Python bindings in mind and forked into [JPQ](https://github.com/jg-rp/jpq). They are now kept here for reference and to compare performance between the two lexing/parsing approaches.
 
@@ -105,9 +106,48 @@ Error: JSONPathError { kind: NameError, msg: "unknown function `foo`", span: (8,
 
 TODO:
 
+## Recursive pest-based parser
+
+`crates/jsonpath_rfc9535_pest_recursive` is the pest parser producing an AST structured with recursive segments rather than a vector of segments.
+
+```rust
+use jsonpath_rfc9535_pest_recursive::JSONPathParser;
+
+fn main() {
+    let p = JSONPathParser::new();
+    let q = "$..foo[0]";
+    match p.parse(q) {
+        Err(err) => print!("{}", err.msg),
+        Ok(query) => {
+            println!("{:#?}", query);
+        }
+    }
+}
+```
+
+```text
+Query {
+    ast: Child {
+        left: Recursive {
+            left: Root,
+            selectors: [
+                Name {
+                    name: "foo",
+                },
+            ],
+        },
+        selectors: [
+            Index {
+                index: 0,
+            },
+        ],
+    },
+}
+```
+
 ## Performance Notes
 
-Without attempting to optimize the grammar, the pest-based parser benchmarks at 164,385 ns/iter, vs 74,718 ns/iter for the hand-crafted parser.
+Without attempting to optimize the grammar, the pest-based parser benchmarks at 164,385 ns/iter, vs 74,718 ns/iter for the hand-crafted parser, and it is marginally faster to produce an AST with recursive segments rather than a vector of segments.
 
 When benchmarking [JPQ](https://github.com/jg-rp/jpq) with the pest parser, this translates to a slowdown of between 0.03 and 0.04 seconds (409 queries repeated 100 times) during the compile phase. This seems like a good tradeoff.
 
