@@ -1,6 +1,6 @@
 //! A JSONPath parser using [pest].
 //!
-//! Refer to `jsonpath.pest` and the [pest book]
+//! Refer to `jsonpath.pest` and the [pest book].
 //!
 //! [pest]: https://pest.rs/
 //! [pest book]: https://pest.rs/book/
@@ -11,7 +11,10 @@ use pest::{iterators::Pair, Parser};
 use pest_derive::Parser;
 
 use crate::{
-    ast::{ComparisonOperator, FilterExpression, LogicalOperator, Query, Segment, Selector},
+    ast::Query,
+    ast::Segment,
+    ast::Selector,
+    ast::{ComparisonOperator, FilterExpression, LogicalOperator},
     errors::JSONPathError,
 };
 
@@ -75,10 +78,10 @@ pub fn standard_functions() -> HashMap<String, FunctionSignature> {
 
     functions
 }
-
 pub struct JSONPathParser {
     pub index_range: RangeInclusive<i64>,
-    pub functions: HashMap<String, FunctionSignature>,
+    pub function_signatures: HashMap<String, FunctionSignature>,
+    pub strict: bool,
 }
 
 impl Default for JSONPathParser {
@@ -91,33 +94,51 @@ impl JSONPathParser {
     pub fn new() -> Self {
         JSONPathParser {
             index_range: ((-2_i64).pow(53) + 1..=2_i64.pow(53) - 1),
-            functions: standard_functions(),
+            function_signatures: standard_functions(),
+            strict: true,
         }
     }
 
-    pub fn parse(&self, query: &str) -> Result<Query, JSONPathError> {
-        let segments: Result<Vec<_>, _> = JSONPath::parse(Rule::jsonpath, query)
-            .map_err(|err| JSONPathError::syntax(err.to_string()))?
-            .map(|segment| self.parse_segment(segment))
-            .collect();
-
-        Ok(Query {
-            segments: segments?,
-        })
+    pub fn add_function(
+        &mut self,
+        name: &str,
+        params: Vec<ExpressionType>,
+        returns: ExpressionType,
+    ) {
+        self.function_signatures.insert(
+            name.to_owned(),
+            FunctionSignature {
+                param_types: params,
+                return_type: returns,
+            },
+        );
     }
 
-    fn parse_segment(&self, segment: Pair<Rule>) -> Result<Segment, JSONPathError> {
+    pub fn parse(&self, query: &str) -> Result<Query, JSONPathError> {
+        let ast = JSONPath::parse(Rule::jsonpath, query)
+            .map_err(|err| JSONPathError::syntax(err.to_string()))?
+            .try_fold(Segment::Root {}, |acc, segment| {
+                self.parse_segment(acc, segment)
+            });
+
+        Ok(Query { root: ast? })
+    }
+
+    fn parse_segment(&self, acc: Segment, segment: Pair<Rule>) -> Result<Segment, JSONPathError> {
         Ok(match segment.as_rule() {
             Rule::child_segment => Segment::Child {
+                left: Box::new(acc),
                 selectors: self.parse_segment_inner(segment.into_inner().next().unwrap())?,
             },
             Rule::descendant_segment => Segment::Recursive {
+                left: Box::new(acc),
                 selectors: self.parse_segment_inner(segment.into_inner().next().unwrap())?,
             },
             Rule::name_segment | Rule::index_segment => Segment::Child {
+                left: Box::new(acc),
                 selectors: vec![self.parse_selector(segment.into_inner().next().unwrap())?],
             },
-            Rule::EOI => Segment::Eoi,
+            Rule::EOI => acc,
             _ => unreachable!(),
         })
     }
@@ -131,7 +152,7 @@ impl JSONPathParser {
                     .collect();
                 seg?
             }
-            Rule::wildcard_selector => vec![Selector::Wild],
+            Rule::wildcard_selector => vec![Selector::Wild {}],
             Rule::member_name_shorthand => vec![Selector::Name {
                 // for child_segment
                 name: segment.as_str().to_owned(),
@@ -148,7 +169,7 @@ impl JSONPathParser {
             Rule::single_quoted => Selector::Name {
                 name: unescape_string(&selector.as_str().replace("\\'", "'")),
             },
-            Rule::wildcard_selector => Selector::Wild,
+            Rule::wildcard_selector => Selector::Wild {},
             Rule::slice_selector => self.parse_slice_selector(selector)?,
             Rule::index_selector => Selector::Index {
                 index: self.parse_i_json_int(selector.as_str())?,
@@ -295,37 +316,35 @@ impl JSONPathParser {
     fn parse_comparable(&self, expr: Pair<Rule>) -> Result<FilterExpression, JSONPathError> {
         Ok(match expr.as_rule() {
             Rule::number => self.parse_number(expr)?,
-            Rule::double_quoted => FilterExpression::String {
+            Rule::double_quoted => FilterExpression::StringLiteral {
                 value: unescape_string(expr.as_str()),
             },
-            Rule::single_quoted => FilterExpression::String {
+            Rule::single_quoted => FilterExpression::StringLiteral {
                 value: unescape_string(&expr.as_str().replace("\\'", "'")),
             },
-            Rule::true_literal => FilterExpression::True,
-            Rule::false_literal => FilterExpression::False,
-            Rule::null => FilterExpression::Null,
+            Rule::true_literal => FilterExpression::True_ {},
+            Rule::false_literal => FilterExpression::False_ {},
+            Rule::null => FilterExpression::Null {},
             Rule::rel_singular_query => {
-                let segments: Result<Vec<_>, _> = expr
+                let segments = expr
                     .into_inner()
-                    .map(|segment| self.parse_segment(segment))
-                    .collect();
+                    .try_fold(Segment::Root {}, |acc, segment| {
+                        self.parse_segment(acc, segment)
+                    });
 
                 FilterExpression::RelativeQuery {
-                    query: Box::new(Query {
-                        segments: segments?,
-                    }),
+                    query: Box::new(Query { root: segments? }),
                 }
             }
             Rule::abs_singular_query => {
-                let segments: Result<Vec<_>, _> = expr
+                let segments = expr
                     .into_inner()
-                    .map(|segment| self.parse_segment(segment))
-                    .collect();
+                    .try_fold(Segment::Root {}, |acc, segment| {
+                        self.parse_segment(acc, segment)
+                    });
 
                 FilterExpression::RootQuery {
-                    query: Box::new(Query {
-                        segments: segments?,
-                    }),
+                    query: Box::new(Query { root: segments? }),
                 }
             }
             Rule::function_expr => self.parse_function_expression(expr)?,
@@ -351,7 +370,7 @@ impl JSONPathParser {
                 }
                 Rule::exp => {
                     let exp_str = pair.as_str();
-                    if exp_str.starts_with('-') {
+                    if exp_str.contains('-') {
                         is_float = true;
                     }
                     n.push_str(exp_str);
@@ -362,7 +381,7 @@ impl JSONPathParser {
 
         if let Some(pair) = it.next() {
             let exp_str = pair.as_str();
-            if exp_str.starts_with('-') {
+            if exp_str.contains('-') {
                 is_float = true;
             }
             n.push_str(exp_str);
@@ -401,27 +420,25 @@ impl JSONPathParser {
     ) -> Result<FilterExpression, JSONPathError> {
         Ok(match expr.as_rule() {
             Rule::rel_query => {
-                let segments: Result<Vec<_>, _> = expr
+                let segments = expr
                     .into_inner()
-                    .map(|segment| self.parse_segment(segment))
-                    .collect();
+                    .try_fold(Segment::Root {}, |acc, segment| {
+                        self.parse_segment(acc, segment)
+                    });
 
                 FilterExpression::RelativeQuery {
-                    query: Box::new(Query {
-                        segments: segments?,
-                    }),
+                    query: Box::new(Query { root: segments? }),
                 }
             }
             Rule::root_query => {
-                let segments: Result<Vec<_>, _> = expr
+                let segments = expr
                     .into_inner()
-                    .map(|segment| self.parse_segment(segment))
-                    .collect();
+                    .try_fold(Segment::Root {}, |acc, segment| {
+                        self.parse_segment(acc, segment)
+                    });
 
                 FilterExpression::RootQuery {
-                    query: Box::new(Query {
-                        segments: segments?,
-                    }),
+                    query: Box::new(Query { root: segments? }),
                 }
             }
             Rule::function_expr => self.parse_function_expression(expr)?,
@@ -446,37 +463,35 @@ impl JSONPathParser {
     fn parse_function_argument(&self, expr: Pair<Rule>) -> Result<FilterExpression, JSONPathError> {
         Ok(match expr.as_rule() {
             Rule::number => self.parse_number(expr)?,
-            Rule::double_quoted => FilterExpression::String {
+            Rule::double_quoted => FilterExpression::StringLiteral {
                 value: unescape_string(expr.as_str()),
             },
-            Rule::single_quoted => FilterExpression::String {
+            Rule::single_quoted => FilterExpression::StringLiteral {
                 value: unescape_string(&expr.as_str().replace("\\'", "'")),
             },
-            Rule::true_literal => FilterExpression::True,
-            Rule::false_literal => FilterExpression::False,
-            Rule::null => FilterExpression::Null,
+            Rule::true_literal => FilterExpression::True_ {},
+            Rule::false_literal => FilterExpression::False_ {},
+            Rule::null => FilterExpression::Null {},
             Rule::rel_query => {
-                let segments: Result<Vec<_>, _> = expr
+                let segments = expr
                     .into_inner()
-                    .map(|segment| self.parse_segment(segment))
-                    .collect();
+                    .try_fold(Segment::Root {}, |acc, segment| {
+                        self.parse_segment(acc, segment)
+                    });
 
                 FilterExpression::RelativeQuery {
-                    query: Box::new(Query {
-                        segments: segments?,
-                    }),
+                    query: Box::new(Query { root: segments? }),
                 }
             }
             Rule::root_query => {
-                let segments: Result<Vec<_>, _> = expr
+                let segments = expr
                     .into_inner()
-                    .map(|segment| self.parse_segment(segment))
-                    .collect();
+                    .try_fold(Segment::Root {}, |acc, segment| {
+                        self.parse_segment(acc, segment)
+                    });
 
                 FilterExpression::RootQuery {
-                    query: Box::new(Query {
-                        segments: segments?,
-                    }),
+                    query: Box::new(Query { root: segments? }),
                 }
             }
             Rule::logical_or_expr => self.parse_logical_or_expression(expr, false)?,
@@ -499,6 +514,7 @@ impl JSONPathParser {
 
         Ok(i)
     }
+
     fn assert_comparable(&self, expr: &FilterExpression) -> Result<(), JSONPathError> {
         // TODO: accept span/position for better errors
         match expr {
@@ -516,7 +532,7 @@ impl JSONPathParser {
                 if let Some(FunctionSignature {
                     return_type: ExpressionType::Value,
                     ..
-                }) = self.functions.get(name)
+                }) = self.function_signatures.get(name)
                 {
                     Ok(())
                 } else {
@@ -536,7 +552,7 @@ impl JSONPathParser {
                 if let Some(FunctionSignature {
                     return_type: ExpressionType::Value,
                     ..
-                }) = self.functions.get(name)
+                }) = self.function_signatures.get(name)
                 {
                     Err(JSONPathError::typ(format!(
                         "result of {}() must be compared",
@@ -557,7 +573,7 @@ impl JSONPathParser {
     ) -> Result<Vec<FilterExpression>, JSONPathError> {
         // TODO: accept span/position for better errors
         let signature = self
-            .functions
+            .function_signatures
             .get(func_name)
             .ok_or_else(|| JSONPathError::name(format!("unknown function `{}`", func_name)))?;
 
@@ -634,7 +650,7 @@ impl JSONPathParser {
             FilterExpression::Function { name, .. } => {
                 // some functions return a value
                 matches!(
-                    self.functions.get(name),
+                    self.function_signatures.get(name),
                     Some(FunctionSignature {
                         return_type: ExpressionType::Value,
                         ..
@@ -650,7 +666,7 @@ impl JSONPathParser {
             FilterExpression::RelativeQuery { .. } | FilterExpression::RootQuery { .. } => true,
             FilterExpression::Function { name, .. } => {
                 matches!(
-                    self.functions.get(name),
+                    self.function_signatures.get(name),
                     Some(FunctionSignature {
                         return_type: ExpressionType::Nodes,
                         ..
