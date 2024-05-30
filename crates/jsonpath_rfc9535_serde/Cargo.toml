@@ -1,0 +1,11 @@
+[package]
+name = "jsonpath_rfc9535_serde"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde_json = "1.0.117"
+lazy_static = "1.4.0"
+pest = "2.7.10"
+pest_derive = "2.7.10"
+itertools = "0.13.0"
