@@ -8,7 +8,7 @@
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use serde_json::Value;
+use serde_json::{Number, Value};
 use std::{
     cmp,
     fmt::{self, Write},
@@ -54,12 +54,7 @@ pub struct FilterContext<'a> {
 }
 
 pub enum FilterExpressionResult<'a> {
-    True,
-    False,
-    NullLiteral,
-    IntLiteral(i64),
-    FloatLiteral(f64),
-    StringLiteral(String),
+    Value(Value),
     Nodes(NodeList<'a>),
     Nothing,
 }
@@ -138,23 +133,17 @@ impl Segment {
         context: &QueryContext,
     ) -> Result<NodeList<'a>, JSONPathError> {
         match self {
-            Segment::Child { selectors } => {
-                let child_nodes: Result<Vec<_>, _> = nodes
-                    .iter()
-                    .flat_map(|node| selectors.iter().map(|s| s.resolve(node, context)))
-                    .collect();
-
-                Ok(child_nodes?.into_iter().flatten().collect())
-            }
-            Segment::Recursive { selectors } => {
-                let descendant_nodes: Result<Vec<_>, _> = nodes
-                    .iter()
-                    .flat_map(|n| visit(n))
-                    .flat_map(|node| selectors.iter().map(move |s| s.resolve(&node, context)))
-                    .collect();
-
-                Ok(descendant_nodes?.into_iter().flatten().collect())
-            }
+            Segment::Child { selectors } => nodes
+                .iter()
+                .flat_map(|node| selectors.iter().map(|s| s.resolve(node, context)))
+                .flatten_ok()
+                .collect(),
+            Segment::Recursive { selectors } => nodes
+                .iter()
+                .flat_map(|n| visit(n))
+                .flat_map(|node| selectors.iter().map(move |s| s.resolve(&node, context)))
+                .flatten_ok()
+                .collect(),
             Segment::Eoi {} => Ok(nodes),
         }
     }
@@ -264,7 +253,7 @@ impl Selector {
                             })
                             .map(|r| (i, v, r))
                     })
-                    .filter_ok(|(_, _, r)| is_truthy(r))
+                    .filter_ok(|(_, _, r)| is_truthy_ref(r))
                     .map_ok(|(i, v, _)| node.new_child_element(v, i))
                     .collect(),
                 Value::Object(obj) => obj
@@ -277,7 +266,7 @@ impl Selector {
                             })
                             .map(|r| (k, v, r))
                     })
-                    .filter_ok(|(_, _, r)| is_truthy(r))
+                    .filter_ok(|(_, _, r)| is_truthy_ref(r))
                     .map_ok(|(k, v, _)| node.new_child_member(v, k))
                     .collect(),
                 _ => Ok(Vec::new()),
@@ -411,23 +400,21 @@ impl FilterExpression {
         context: &FilterContext<'a>,
     ) -> Result<FilterExpressionResult<'a>, JSONPathError> {
         match self {
-            FilterExpression::True => Ok(FilterExpressionResult::True),
-            FilterExpression::False => Ok(FilterExpressionResult::False),
-            FilterExpression::Null => Ok(FilterExpressionResult::NullLiteral),
+            FilterExpression::True => Ok(FilterExpressionResult::Value(Value::Bool(true))),
+            FilterExpression::False => Ok(FilterExpressionResult::Value(Value::Bool(false))),
+            FilterExpression::Null => Ok(FilterExpressionResult::Value(Value::Null)),
             FilterExpression::String { value } => {
-                Ok(FilterExpressionResult::StringLiteral(value.clone()))
+                Ok(FilterExpressionResult::Value(value.as_str().into()))
             }
             FilterExpression::Int { value } => {
-                Ok(FilterExpressionResult::IntLiteral(value.clone()))
+                Ok(FilterExpressionResult::Value(Number::from(*value).into()))
             }
-            FilterExpression::Float { value } => {
-                Ok(FilterExpressionResult::FloatLiteral(value.clone()))
-            }
+            FilterExpression::Float { value } => Ok(FilterExpressionResult::Value((*value).into())),
             FilterExpression::Not { expression } => expression.evaluate(context).map(|rv| {
-                if !is_truthy(&rv) {
-                    FilterExpressionResult::True
+                if !is_truthy(rv) {
+                    FilterExpressionResult::Value(Value::Bool(true))
                 } else {
-                    FilterExpressionResult::False
+                    FilterExpressionResult::Value(Value::Bool(false))
                 }
             }),
             FilterExpression::Logical {
@@ -435,23 +422,29 @@ impl FilterExpression {
                 operator,
                 right,
             } => {
-                if logical(
-                    &left.evaluate(context)?,
-                    operator,
-                    &right.evaluate(context)?,
-                ) {
-                    Ok(FilterExpressionResult::True)
+                if logical(left.evaluate(context)?, operator, right.evaluate(context)?) {
+                    Ok(FilterExpressionResult::Value(Value::Bool(true)))
                 } else {
-                    Ok(FilterExpressionResult::False)
+                    Ok(FilterExpressionResult::Value(Value::Bool(false)))
                 }
             }
             FilterExpression::Comparison {
                 left,
                 operator,
                 right,
-            } => todo!(),
-            FilterExpression::RelativeQuery { query } => todo!(),
-            FilterExpression::RootQuery { query } => todo!(),
+            } => {
+                if compare(left.evaluate(context)?, operator, right.evaluate(context)?) {
+                    Ok(FilterExpressionResult::Value(Value::Bool(true)))
+                } else {
+                    Ok(FilterExpressionResult::Value(Value::Bool(false)))
+                }
+            }
+            FilterExpression::RelativeQuery { query } => {
+                Ok(FilterExpressionResult::Nodes(query.find(context.current)?))
+            }
+            FilterExpression::RootQuery { query } => {
+                Ok(FilterExpressionResult::Nodes(query.find(context.root)?))
+            }
             FilterExpression::Function { name, args } => todo!(),
         }
     }
@@ -605,22 +598,151 @@ fn slice<'a>(
     sliced_array
 }
 
-pub fn is_truthy(rv: &FilterExpressionResult) -> bool {
+pub fn is_truthy(rv: FilterExpressionResult) -> bool {
     match rv {
         FilterExpressionResult::Nothing => false,
         FilterExpressionResult::Nodes(nodes) => !nodes.is_empty(),
-        FilterExpressionResult::False => false,
-        _ => true,
+        FilterExpressionResult::Value(v) => v.as_bool().or(Some(true)).unwrap() == true,
+    }
+}
+
+pub fn is_truthy_ref(rv: &FilterExpressionResult) -> bool {
+    match rv {
+        FilterExpressionResult::Nothing => false,
+        FilterExpressionResult::Nodes(nodes) => !nodes.is_empty(),
+        FilterExpressionResult::Value(v) => v.as_bool().or(Some(true)).unwrap() == true,
     }
 }
 
 fn logical(
-    left: &FilterExpressionResult,
+    left: FilterExpressionResult,
     op: &LogicalOperator,
-    right: &FilterExpressionResult,
+    right: FilterExpressionResult,
 ) -> bool {
     match op {
         LogicalOperator::And => is_truthy(left) && is_truthy(right),
         LogicalOperator::Or => is_truthy(left) || is_truthy(right),
     }
+}
+
+fn nodes_or_singular<'a>(rv: FilterExpressionResult<'a>) -> FilterExpressionResult<'a> {
+    match rv {
+        FilterExpressionResult::Nodes(ref nodes) => {
+            if nodes.len() == 1 {
+                FilterExpressionResult::Value(nodes.first().unwrap().value.clone())
+            } else {
+                rv
+            }
+        }
+        _ => rv,
+    }
+}
+
+fn compare(
+    left: FilterExpressionResult,
+    op: &ComparisonOperator,
+    right: FilterExpressionResult,
+) -> bool {
+    use ComparisonOperator::*;
+    let left = nodes_or_singular(left);
+    let right = nodes_or_singular(right);
+    match op {
+        Eq => eq((&left, &right)),
+        Ne => !eq((&left, &right)),
+        Lt => lt((&left, &right)),
+        Gt => lt((&right, &left)),
+        Ge => lt((&right, &left)) || eq((&left, &right)),
+        Le => lt((&left, &right)) || eq((&left, &right)),
+    }
+}
+
+fn eq(pair: (&FilterExpressionResult, &FilterExpressionResult)) -> bool {
+    use FilterExpressionResult::*;
+    match pair {
+        (Nodes(left), Nodes(right)) => {
+            left.len() == right.len() && left.iter().zip(right).all(|(l, r)| l.value == r.value)
+        }
+        (Nodes(nodes), Nothing) | (Nothing, Nodes(nodes)) => nodes.is_empty(),
+        (Nodes(nodes), Value(v)) | (Value(v), Nodes(nodes)) => {
+            if nodes.len() == 1 {
+                v.eq(nodes.first().unwrap().value)
+            } else {
+                false
+            }
+        }
+        (Nothing, Nothing) => true,
+        (Nothing, Value(..)) | (Value(..), Nothing) => false,
+        (Value(left), Value(right)) => left.eq(right),
+    }
+}
+
+fn lt(pair: (&FilterExpressionResult, &FilterExpressionResult)) -> bool {
+    match pair {
+        (
+            FilterExpressionResult::Value(Value::String(left)),
+            FilterExpressionResult::Value(Value::String(right)),
+        ) => left < right,
+        (
+            FilterExpressionResult::Value(Value::Bool(..)),
+            FilterExpressionResult::Value(Value::Bool(..)),
+        ) => false,
+        (
+            FilterExpressionResult::Value(Value::Number(left)),
+            FilterExpressionResult::Value(Value::Number(right)),
+        ) => lt_number(left, right),
+        _ => false,
+    }
+}
+
+fn lt_number(left: &Number, right: &Number) -> bool {
+    if left.is_f64() && right.is_f64() {
+        return left.as_f64().unwrap() < right.as_f64().unwrap();
+    }
+
+    if left.is_i64() && right.is_i64() {
+        return left.as_i64().unwrap() < right.as_i64().unwrap();
+    }
+
+    if left.is_u64() && right.is_u64() {
+        return left.as_u64().unwrap() < right.as_u64().unwrap();
+    }
+
+    // Float and int comparisons
+    if left.is_f64() && right.is_i64() {
+        return left.as_f64().unwrap() < right.as_i64().unwrap() as f64;
+    }
+
+    if left.is_i64() && right.is_f64() {
+        return (left.as_i64().unwrap() as f64) < right.as_f64().unwrap();
+    }
+
+    // Float and unsigned comparisons
+    if left.is_f64() && right.is_u64() {
+        return left.as_f64().unwrap() < right.as_u64().unwrap() as f64;
+    }
+
+    if left.is_u64() && right.is_f64() {
+        return (left.as_u64().unwrap() as f64) < right.as_f64().unwrap();
+    }
+
+    // Int and unsigned comparisons
+    if left.is_i64() && right.is_u64() {
+        let l = left.as_i64().unwrap();
+        if l < 0 {
+            return true;
+        } else {
+            return (l as u64) < right.as_u64().unwrap();
+        }
+    }
+
+    if left.is_u64() && right.is_i64() {
+        let r = right.as_i64().unwrap();
+        if r < 0 {
+            return false;
+        } else {
+            return left.as_u64().unwrap() < (r as u64);
+        }
+    }
+
+    false
 }
