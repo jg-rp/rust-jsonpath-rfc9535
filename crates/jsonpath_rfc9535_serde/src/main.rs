@@ -1,4 +1,4 @@
-use jsonpath_rfc9535_serde::{jsonpath::find, Query};
+use jsonpath_rfc9535_serde::jsonpath::find;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -38,30 +38,20 @@ struct Case {
     invalid_selector: bool,
 }
 
-fn compliance() -> Result<(), Box<dyn Error>> {
+fn flame() -> Result<(), Box<dyn Error>> {
     let file = File::open("/tmp/cts.json")?;
     let reader = BufReader::new(file);
     let test_suite: TestSuite = serde_json::from_reader(reader)?;
 
-    for case in test_suite.tests {
-        if SKIP.contains(case.name.as_str()) {
-            println!("SKIPPING {}", case.name);
-            continue;
-        }
+    let valid_queries: Vec<Case> = test_suite
+        .tests
+        .into_iter()
+        .filter(|case| !case.invalid_selector)
+        .collect();
 
-        println!("{}", case.name);
-        if case.invalid_selector {
-            assert!(
-                Query::standard(&case.selector).is_err(),
-                "{} did not fail",
-                case.name
-            );
-        } else if case.results.len() > 0 {
-            ()
-        } else {
-            let rv = find(&case.selector, &case.document)?;
-            let values: Vec<Value> = rv.iter().map(|n| n.value.clone()).collect();
-            assert_eq!(values, case.result, "{} failed", case.name);
+    for _ in 1..100 {
+        for case in valid_queries.iter() {
+            find(&case.selector, &case.document).unwrap();
         }
     }
 
@@ -84,5 +74,5 @@ fn main() {
 
     // let rv = find(q, &v).unwrap();
     // println!("{:#?}", rv);
-    compliance().unwrap()
+    flame().unwrap()
 }

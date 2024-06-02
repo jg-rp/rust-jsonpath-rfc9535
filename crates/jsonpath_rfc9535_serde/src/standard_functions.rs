@@ -90,7 +90,7 @@ pub struct Match {
 impl Match {
     pub fn new() -> Self {
         Self {
-            cache: Mutex::new(LruCache::new(NonZeroUsize::new(10).unwrap())),
+            cache: Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap())),
         }
     }
 }
@@ -113,8 +113,9 @@ impl FunctionExtension for Match {
                 let p = u.as_str().unwrap();
 
                 // TODO: fail early if p is known to be invalid
+                let mut cache = self.cache.lock().unwrap();
 
-                match self.cache.lock().unwrap().get(p) {
+                match cache.get(p) {
                     Some(re) => {
                         FilterExpressionResult::Value(serde_json::Value::Bool(re.is_match(s)))
                     }
@@ -125,9 +126,7 @@ impl FunctionExtension for Match {
 
                         if let Ok(re) = Regex::new(&full_match(&p)) {
                             let rv = re.is_match(s);
-                            // TODO:
-                            // FIXME:
-                            // self.cache.lock().unwrap().push(s.to_owned(), re);
+                            cache.push(p.to_owned(), re);
                             FilterExpressionResult::Value(serde_json::Value::Bool(rv))
                         } else {
                             FilterExpressionResult::Value(serde_json::Value::Bool(false))
@@ -154,7 +153,7 @@ pub struct Search {
 impl Search {
     pub fn new() -> Self {
         Self {
-            cache: Mutex::new(LruCache::new(NonZeroUsize::new(10).unwrap())),
+            cache: Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap())),
         }
     }
 }
@@ -177,8 +176,9 @@ impl FunctionExtension for Search {
                 let p = u.as_str().unwrap();
 
                 // TODO: fail early if p is known to be invalid
+                let mut cache = self.cache.lock().unwrap();
 
-                match self.cache.lock().unwrap().get(p) {
+                match cache.get(p) {
                     Some(re) => {
                         FilterExpressionResult::Value(serde_json::Value::Bool(re.is_match(s)))
                     }
@@ -189,9 +189,7 @@ impl FunctionExtension for Search {
 
                         if let Ok(re) = Regex::new(&map_regex(&p)) {
                             let rv = re.is_match(s);
-                            // TODO:
-                            // FIXME:
-                            // self.cache.lock().unwrap().push(s.to_owned(), re);
+                            cache.push(p.to_owned(), re);
                             FilterExpressionResult::Value(serde_json::Value::Bool(rv))
                         } else {
                             println!("re compilation failed {:#?}", Regex::new(&map_regex(&p)));
