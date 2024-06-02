@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::FilterExpressionResult;
 
+#[derive(Debug)]
 pub enum ExpressionType {
     Logical,
     Nodes,

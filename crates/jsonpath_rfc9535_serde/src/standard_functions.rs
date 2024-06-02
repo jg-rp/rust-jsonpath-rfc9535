@@ -59,9 +59,9 @@ impl FunctionExtension for Length {
     fn call(&self, args: Vec<FilterExpressionResult>) -> FilterExpressionResult {
         match args.first().unwrap() {
             FilterExpressionResult::Value(value) => match value {
-                serde_json::Value::String(s) => {
-                    FilterExpressionResult::Value(serde_json::Value::Number(s.len().into()))
-                }
+                serde_json::Value::String(s) => FilterExpressionResult::Value(
+                    serde_json::Value::Number(s.chars().count().into()),
+                ),
                 serde_json::Value::Array(a) => {
                     FilterExpressionResult::Value(serde_json::Value::Number(a.len().into()))
                 }
@@ -70,6 +70,7 @@ impl FunctionExtension for Length {
                 }
                 _ => FilterExpressionResult::Nothing,
             },
+            FilterExpressionResult::Nothing => FilterExpressionResult::Nothing,
             _ => unreachable!(),
         }
     }
@@ -124,7 +125,9 @@ impl FunctionExtension for Match {
 
                         if let Ok(re) = Regex::new(&full_match(&p)) {
                             let rv = re.is_match(s);
-                            self.cache.lock().unwrap().push(s.to_owned(), re);
+                            // TODO:
+                            // FIXME:
+                            // self.cache.lock().unwrap().push(s.to_owned(), re);
                             FilterExpressionResult::Value(serde_json::Value::Bool(rv))
                         } else {
                             FilterExpressionResult::Value(serde_json::Value::Bool(false))
@@ -186,9 +189,12 @@ impl FunctionExtension for Search {
 
                         if let Ok(re) = Regex::new(&map_regex(&p)) {
                             let rv = re.is_match(s);
-                            self.cache.lock().unwrap().push(s.to_owned(), re);
+                            // TODO:
+                            // FIXME:
+                            // self.cache.lock().unwrap().push(s.to_owned(), re);
                             FilterExpressionResult::Value(serde_json::Value::Bool(rv))
                         } else {
+                            println!("re compilation failed {:#?}", Regex::new(&map_regex(&p)));
                             FilterExpressionResult::Value(serde_json::Value::Bool(false))
                         }
                     }
@@ -244,42 +250,43 @@ impl FunctionExtension for Value {
 
 /// Map re pattern to i-regexp pattern.
 fn map_regex(pattern: &str) -> String {
-    let mut escaped = false;
-    let mut char_class = false;
-    let mut parts: Vec<String> = Vec::new();
+    // let mut escaped = false;
+    // let mut char_class = false;
+    // let mut parts: Vec<String> = Vec::new();
 
-    for c in pattern.chars() {
-        if escaped {
-            parts.push(String::from(c));
-            escaped = false;
-            continue;
-        }
+    // for c in pattern.chars() {
+    //     if escaped {
+    //         parts.push(String::from(c));
+    //         escaped = false;
+    //         continue;
+    //     }
 
-        match c {
-            '.' => {
-                if !char_class {
-                    parts.push(String::from("(?:(?![\r\n])\\P{Cs}|\\p{Cs}\\p{Cs})"));
-                } else {
-                    parts.push(String::from(c));
-                }
-            }
-            '\\' => {
-                escaped = true;
-                parts.push(String::from(c));
-            }
-            '[' => {
-                char_class = true;
-                parts.push(String::from(c));
-            }
-            ']' => {
-                char_class = false;
-                parts.push(String::from(c));
-            }
-            _ => parts.push(String::from(c)),
-        }
-    }
+    //     match c {
+    //         '.' => {
+    //             if !char_class {
+    //                 parts.push(String::from("(?:(?![\r\n])\\P{Cs}|\\p{Cs}\\p{Cs})"));
+    //             } else {
+    //                 parts.push(String::from(c));
+    //             }
+    //         }
+    //         '\\' => {
+    //             escaped = true;
+    //             parts.push(String::from(c));
+    //         }
+    //         '[' => {
+    //             char_class = true;
+    //             parts.push(String::from(c));
+    //         }
+    //         ']' => {
+    //             char_class = false;
+    //             parts.push(String::from(c));
+    //         }
+    //         _ => parts.push(String::from(c)),
+    //     }
+    // }
 
-    return parts.join("");
+    // parts.join("");
+    pattern.to_owned()
 }
 
 fn full_match(pattern: &str) -> String {

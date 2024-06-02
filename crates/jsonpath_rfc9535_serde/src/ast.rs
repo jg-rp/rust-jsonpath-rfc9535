@@ -57,6 +57,7 @@ pub struct FilterContext<'a, 'b> {
     current: &'a Value,
 }
 
+#[derive(Debug)]
 pub enum FilterExpressionResult<'a> {
     Value(Value),
     Nodes(NodeList<'a>),
@@ -221,8 +222,13 @@ impl Selector {
                 }
             }
             Selector::Index { index } => {
-                if let Some(v) = node.value.get(*index as usize) {
-                    Ok(vec![node.new_child_element(v, *index as usize)])
+                if let Some(array) = node.value.as_array() {
+                    let norm = norm_index(*index, array.len());
+                    if let Some(v) = array.get(norm) {
+                        Ok(vec![node.new_child_element(v, norm)])
+                    } else {
+                        Ok(Vec::new())
+                    }
                 } else {
                     Ok(Vec::new())
                 }
@@ -688,15 +694,75 @@ fn eq(pair: (&FilterExpressionResult, &FilterExpressionResult)) -> bool {
         (Nodes(nodes), Nothing) | (Nothing, Nodes(nodes)) => nodes.is_empty(),
         (Nodes(nodes), Value(v)) | (Value(v), Nodes(nodes)) => {
             if nodes.len() == 1 {
-                v.eq(nodes.first().unwrap().value)
+                let nv = nodes.first().unwrap().value;
+                match (v, nv) {
+                    (serde_json::Value::Number(l), serde_json::Value::Number(r)) => eq_number(l, r),
+                    _ => v.eq(nv),
+                }
             } else {
                 false
             }
         }
         (Nothing, Nothing) => true,
         (Nothing, Value(..)) | (Value(..), Nothing) => false,
-        (Value(left), Value(right)) => left.eq(right),
+        (Value(left), Value(right)) => match (left, right) {
+            (serde_json::Value::Number(l), serde_json::Value::Number(r)) => eq_number(l, r),
+            _ => left.eq(right),
+        },
     }
+}
+
+fn eq_number(left: &Number, right: &Number) -> bool {
+    if left.is_f64() && right.is_f64() {
+        return left.as_f64().unwrap() == right.as_f64().unwrap();
+    }
+
+    if left.is_i64() && right.is_i64() {
+        return left.as_i64().unwrap() == right.as_i64().unwrap();
+    }
+
+    if left.is_u64() && right.is_u64() {
+        return left.as_u64().unwrap() == right.as_u64().unwrap();
+    }
+
+    // Float and int comparisons
+    if left.is_f64() && right.is_i64() {
+        return left.as_f64().unwrap() == right.as_i64().unwrap() as f64;
+    }
+
+    if left.is_i64() && right.is_f64() {
+        return (left.as_i64().unwrap() as f64) == right.as_f64().unwrap();
+    }
+
+    // Float and unsigned comparisons
+    if left.is_f64() && right.is_u64() {
+        return left.as_f64().unwrap() == right.as_u64().unwrap() as f64;
+    }
+
+    if left.is_u64() && right.is_f64() {
+        return (left.as_u64().unwrap() as f64) == right.as_f64().unwrap();
+    }
+
+    // Int and unsigned comparisons
+    if left.is_i64() && right.is_u64() {
+        let l = left.as_i64().unwrap();
+        if l < 0 {
+            return false;
+        } else {
+            return (l as u64) == right.as_u64().unwrap();
+        }
+    }
+
+    if left.is_u64() && right.is_i64() {
+        let r = right.as_i64().unwrap();
+        if r < 0 {
+            return false;
+        } else {
+            return left.as_u64().unwrap() == (r as u64);
+        }
+    }
+
+    false
 }
 
 fn lt(pair: (&FilterExpressionResult, &FilterExpressionResult)) -> bool {
@@ -775,7 +841,7 @@ fn unpack_result<'a>(
     param_types: &[ExpressionType],
     index: usize,
 ) -> Result<FilterExpressionResult<'a>, JSONPathError> {
-    if !matches!(param_types.get(index).unwrap(), ExpressionType::Nodes) {
+    if matches!(param_types.get(index).unwrap(), ExpressionType::Nodes) {
         return Ok(rv);
     }
 
@@ -788,5 +854,13 @@ fn unpack_result<'a>(
             _ => Ok(rv),
         },
         _ => Ok(rv),
+    }
+}
+
+fn norm_index(index: i64, length: usize) -> usize {
+    if index < 0 && length >= index.abs() as usize {
+        (length as i64 + index) as usize
+    } else {
+        index as usize
     }
 }

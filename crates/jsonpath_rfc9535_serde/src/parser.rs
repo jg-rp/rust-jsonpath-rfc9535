@@ -295,7 +295,7 @@ impl JSONPathParser {
                 }
                 Rule::exp => {
                     let exp_str = pair.as_str();
-                    if exp_str.starts_with('-') {
+                    if exp_str.contains('-') {
                         is_float = true;
                     }
                     n.push_str(exp_str);
@@ -306,7 +306,7 @@ impl JSONPathParser {
 
         if let Some(pair) = it.next() {
             let exp_str = pair.as_str();
-            if exp_str.starts_with('-') {
+            if exp_str.contains('-') {
                 is_float = true;
             }
             n.push_str(exp_str);

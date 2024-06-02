@@ -1,8 +1,9 @@
+use std::{collections::HashSet, error::Error, fs::File, io::BufReader};
+
 use jsonpath_rfc9535_serde::{jsonpath::find, Query};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashSet, error::Error, fs::File, io::BufReader};
 
 lazy_static! {
     static ref SKIP: HashSet<String> = {
@@ -38,6 +39,7 @@ struct Case {
     invalid_selector: bool,
 }
 
+#[test]
 fn compliance() -> Result<(), Box<dyn Error>> {
     let file = File::open("/tmp/cts.json")?;
     let reader = BufReader::new(file);
@@ -61,28 +63,9 @@ fn compliance() -> Result<(), Box<dyn Error>> {
         } else {
             let rv = find(&case.selector, &case.document)?;
             let values: Vec<Value> = rv.iter().map(|n| n.value.clone()).collect();
-            assert_eq!(values, case.result, "{} failed", case.name);
+            assert_eq!(values, case.result, "{}: {}", case.name, case.selector);
         }
     }
 
     Ok(())
-}
-
-fn main() {
-    // let data = r#"
-    // [
-    //     {
-    //       "a": "ab"
-    //     }
-    //   ]"#;
-
-    // // Parse the string of data into serde_json::Value.
-    // let v: Value = serde_json::from_str(data).unwrap();
-    // let q = "$[?match(@.a, 'a.*')]";
-
-    // // println!("Q: {:#?}", Query::standard(q));
-
-    // let rv = find(q, &v).unwrap();
-    // println!("{:#?}", rv);
-    compliance().unwrap()
 }
