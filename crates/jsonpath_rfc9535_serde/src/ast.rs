@@ -14,7 +14,9 @@ use std::{
     fmt::{self, Write},
 };
 
-use crate::{errors::JSONPathError, parser::JSONPathParser};
+use crate::{
+    env::Environment, errors::JSONPathError, function::ExpressionType, parser::JSONPathParser,
+};
 
 lazy_static! {
     static ref PARSER: JSONPathParser = JSONPathParser::new();
@@ -22,8 +24,8 @@ lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct Node<'a> {
-    value: &'a Value,
-    location: String,
+    pub value: &'a Value,
+    pub location: String,
 }
 
 impl<'a> Node<'a> {
@@ -44,11 +46,13 @@ impl<'a> Node<'a> {
 
 pub type NodeList<'a> = Vec<Node<'a>>;
 
-struct QueryContext<'a> {
+struct QueryContext<'a, 'b> {
+    env: &'b Environment,
     root: &'a Value,
 }
 
-pub struct FilterContext<'a> {
+pub struct FilterContext<'a, 'b> {
+    env: &'b Environment,
     root: &'a Value,
     current: &'a Value,
 }
@@ -73,8 +77,12 @@ impl Query {
         PARSER.parse(expr)
     }
 
-    pub fn find<'a>(&self, value: &'a Value) -> Result<NodeList<'a>, JSONPathError> {
-        let context = QueryContext { root: value };
+    pub fn find<'a, 'b>(
+        &self,
+        value: &'a Value,
+        env: &'b Environment,
+    ) -> Result<NodeList<'a>, JSONPathError> {
+        let context = QueryContext { root: value, env };
 
         let root_node = Node {
             value,
@@ -250,6 +258,7 @@ impl Selector {
                             .evaluate(&FilterContext {
                                 root: context.root,
                                 current: v,
+                                env: context.env,
                             })
                             .map(|r| (i, v, r))
                     })
@@ -263,6 +272,7 @@ impl Selector {
                             .evaluate(&FilterContext {
                                 root: context.root,
                                 current: v,
+                                env: context.env,
                             })
                             .map(|r| (k, v, r))
                     })
@@ -395,9 +405,9 @@ impl FilterExpression {
 }
 
 impl FilterExpression {
-    fn evaluate<'a>(
+    fn evaluate<'a, 'b: 'a>(
         &self,
-        context: &FilterContext<'a>,
+        context: &FilterContext<'a, 'b>,
     ) -> Result<FilterExpressionResult<'a>, JSONPathError> {
         match self {
             FilterExpression::True => Ok(FilterExpressionResult::Value(Value::Bool(true))),
@@ -439,13 +449,26 @@ impl FilterExpression {
                     Ok(FilterExpressionResult::Value(Value::Bool(false)))
                 }
             }
-            FilterExpression::RelativeQuery { query } => {
-                Ok(FilterExpressionResult::Nodes(query.find(context.current)?))
+            FilterExpression::RelativeQuery { query } => Ok(FilterExpressionResult::Nodes(
+                query.find(context.current, context.env)?,
+            )),
+            FilterExpression::RootQuery { query } => Ok(FilterExpressionResult::Nodes(
+                query.find(context.root, context.env)?,
+            )),
+            FilterExpression::Function { name, args } => {
+                let fn_ext = context.env.function_register.get(name).ok_or_else(|| {
+                    JSONPathError::name(format!("missing function definition for {}", name))
+                })?;
+
+                let _args: Result<Vec<_>, _> = args
+                    .iter()
+                    .map(|expr| expr.evaluate(context))
+                    .enumerate()
+                    .map(|(i, rv)| unpack_result(rv?, &fn_ext.sig().param_types, i))
+                    .collect();
+
+                Ok(fn_ext.call(_args?))
             }
-            FilterExpression::RootQuery { query } => {
-                Ok(FilterExpressionResult::Nodes(query.find(context.root)?))
-            }
-            FilterExpression::Function { name, args } => todo!(),
         }
     }
 }
@@ -745,4 +768,25 @@ fn lt_number(left: &Number, right: &Number) -> bool {
     }
 
     false
+}
+
+fn unpack_result<'a>(
+    rv: FilterExpressionResult<'a>,
+    param_types: &[ExpressionType],
+    index: usize,
+) -> Result<FilterExpressionResult<'a>, JSONPathError> {
+    if !matches!(param_types.get(index).unwrap(), ExpressionType::Nodes) {
+        return Ok(rv);
+    }
+
+    match &rv {
+        FilterExpressionResult::Nodes(nodes) => match nodes.len() {
+            0 => Ok(FilterExpressionResult::Nothing),
+            1 => Ok(FilterExpressionResult::Value(
+                nodes.first().unwrap().value.clone(),
+            )),
+            _ => Ok(rv),
+        },
+        _ => Ok(rv),
+    }
 }

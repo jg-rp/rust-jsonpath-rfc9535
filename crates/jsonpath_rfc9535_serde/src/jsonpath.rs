@@ -1,8 +1,12 @@
+use crate::{ast::NodeList, env::Environment, errors::JSONPathError, Query};
+use lazy_static::lazy_static;
 use serde_json::Value;
 
-use crate::{ast::NodeList, errors::JSONPathError, Query};
+lazy_static! {
+    static ref ENV: Environment = Environment::new();
+}
 
 pub fn find<'a>(expr: &str, value: &'a Value) -> Result<NodeList<'a>, JSONPathError> {
     let query = Query::standard(expr)?;
-    query.find(value)
+    query.find(value, &ENV)
 }

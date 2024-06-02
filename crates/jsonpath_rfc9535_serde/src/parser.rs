@@ -13,68 +13,12 @@ use pest_derive::Parser;
 use crate::{
     ast::{ComparisonOperator, FilterExpression, LogicalOperator, Query, Segment, Selector},
     errors::JSONPathError,
+    function::{standard_functions, ExpressionType, FunctionSignature},
 };
 
 #[derive(Parser)]
 #[grammar = "jsonpath.pest"]
 struct JSONPath;
-
-pub enum ExpressionType {
-    Logical,
-    Nodes,
-    Value,
-}
-
-pub struct FunctionSignature {
-    pub param_types: Vec<ExpressionType>,
-    pub return_type: ExpressionType,
-}
-
-pub fn standard_functions() -> HashMap<String, FunctionSignature> {
-    let mut functions = HashMap::new();
-
-    functions.insert(
-        "count".to_owned(),
-        FunctionSignature {
-            param_types: vec![ExpressionType::Nodes],
-            return_type: ExpressionType::Value,
-        },
-    );
-
-    functions.insert(
-        "length".to_owned(),
-        FunctionSignature {
-            param_types: vec![ExpressionType::Value],
-            return_type: ExpressionType::Value,
-        },
-    );
-
-    functions.insert(
-        "match".to_owned(),
-        FunctionSignature {
-            param_types: vec![ExpressionType::Value, ExpressionType::Value],
-            return_type: ExpressionType::Logical,
-        },
-    );
-
-    functions.insert(
-        "search".to_owned(),
-        FunctionSignature {
-            param_types: vec![ExpressionType::Value, ExpressionType::Value],
-            return_type: ExpressionType::Logical,
-        },
-    );
-
-    functions.insert(
-        "value".to_owned(),
-        FunctionSignature {
-            param_types: vec![ExpressionType::Nodes],
-            return_type: ExpressionType::Value,
-        },
-    );
-
-    functions
-}
 
 pub struct JSONPathParser {
     pub index_range: RangeInclusive<i64>,
