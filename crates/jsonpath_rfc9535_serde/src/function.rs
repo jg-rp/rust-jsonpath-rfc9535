@@ -61,7 +61,7 @@ pub fn standard_functions() -> HashMap<String, FunctionSignature> {
 }
 
 pub trait FunctionExtension {
-    fn call(&self, args: Vec<FilterExpressionResult>) -> FilterExpressionResult;
+    fn call<'a>(&self, args: Vec<FilterExpressionResult<'a>>) -> FilterExpressionResult<'a>;
     fn sig(&self) -> FunctionSignature;
 }
 

@@ -2,7 +2,6 @@ use std::{num::NonZeroUsize, sync::Mutex};
 
 use lru::LruCache;
 use regex::Regex;
-use serde_json;
 
 use crate::{
     ast::FilterExpressionResult,
@@ -24,11 +23,9 @@ impl Default for Count {
 }
 
 impl FunctionExtension for Count {
-    fn call(&self, args: Vec<FilterExpressionResult>) -> FilterExpressionResult {
+    fn call<'a>(&self, args: Vec<FilterExpressionResult<'a>>) -> FilterExpressionResult<'a> {
         match args.first().unwrap() {
-            FilterExpressionResult::Nodes(nodes) => {
-                FilterExpressionResult::Value(serde_json::Value::Number(nodes.len().into()))
-            }
+            FilterExpressionResult::Nodes(nodes) => FilterExpressionResult::Int(nodes.len() as i64),
             _ => unreachable!(),
         }
     }
@@ -56,22 +53,19 @@ impl Default for Length {
 }
 
 impl FunctionExtension for Length {
-    fn call(&self, args: Vec<FilterExpressionResult>) -> FilterExpressionResult {
+    fn call<'a>(&self, args: Vec<FilterExpressionResult<'a>>) -> FilterExpressionResult<'a> {
         match args.first().unwrap() {
-            FilterExpressionResult::Value(value) => match value {
-                serde_json::Value::String(s) => FilterExpressionResult::Value(
-                    serde_json::Value::Number(s.chars().count().into()),
-                ),
-                serde_json::Value::Array(a) => {
-                    FilterExpressionResult::Value(serde_json::Value::Number(a.len().into()))
-                }
-                serde_json::Value::Object(o) => {
-                    FilterExpressionResult::Value(serde_json::Value::Number(o.len().into()))
-                }
-                _ => FilterExpressionResult::Nothing,
-            },
-            FilterExpressionResult::Nothing => FilterExpressionResult::Nothing,
-            _ => unreachable!(),
+            // TODO: UInt
+            FilterExpressionResult::String(s) => {
+                FilterExpressionResult::Int(s.chars().count() as i64)
+            }
+            FilterExpressionResult::Array(a) => {
+                FilterExpressionResult::Int(a.as_array().unwrap().len() as i64)
+            }
+            FilterExpressionResult::Object(o) => {
+                FilterExpressionResult::Int(o.as_object().unwrap().len() as i64)
+            }
+            _ => FilterExpressionResult::Nothing,
         }
     }
 
@@ -102,39 +96,30 @@ impl Default for Match {
 }
 
 impl FunctionExtension for Match {
-    fn call(&self, args: Vec<FilterExpressionResult>) -> FilterExpressionResult {
+    fn call<'a>(&self, args: Vec<FilterExpressionResult<'a>>) -> FilterExpressionResult<'a> {
         match (args.first().unwrap(), args.get(1).unwrap()) {
-            (FilterExpressionResult::Value(v), FilterExpressionResult::Value(u)) => {
-                if !v.is_string() || !u.is_string() {
-                    return FilterExpressionResult::Value(serde_json::Value::Bool(false));
-                }
-
-                let s = v.as_str().unwrap();
-                let p = u.as_str().unwrap();
-
+            (FilterExpressionResult::String(s), FilterExpressionResult::String(p)) => {
                 // TODO: fail early if p is known to be invalid
                 let mut cache = self.cache.lock().unwrap();
 
                 match cache.get(p) {
-                    Some(re) => {
-                        FilterExpressionResult::Value(serde_json::Value::Bool(re.is_match(s)))
-                    }
+                    Some(re) => FilterExpressionResult::Bool(re.is_match(s)),
                     None => {
                         if !iregexp::check(p) {
-                            return FilterExpressionResult::Value(serde_json::Value::Bool(false));
+                            return FilterExpressionResult::Bool(false);
                         }
 
                         if let Ok(re) = Regex::new(&full_match(&p)) {
                             let rv = re.is_match(s);
                             cache.push(p.to_owned(), re);
-                            FilterExpressionResult::Value(serde_json::Value::Bool(rv))
+                            FilterExpressionResult::Bool(rv)
                         } else {
-                            FilterExpressionResult::Value(serde_json::Value::Bool(false))
+                            FilterExpressionResult::Bool(false)
                         }
                     }
                 }
             }
-            _ => unreachable!(),
+            _ => FilterExpressionResult::Bool(false),
         }
     }
 
@@ -165,40 +150,30 @@ impl Default for Search {
 }
 
 impl FunctionExtension for Search {
-    fn call(&self, args: Vec<FilterExpressionResult>) -> FilterExpressionResult {
+    fn call<'a>(&self, args: Vec<FilterExpressionResult<'a>>) -> FilterExpressionResult<'a> {
         match (args.first().unwrap(), args.get(1).unwrap()) {
-            (FilterExpressionResult::Value(v), FilterExpressionResult::Value(u)) => {
-                if !v.is_string() || !u.is_string() {
-                    return FilterExpressionResult::Value(serde_json::Value::Bool(false));
-                }
-
-                let s = v.as_str().unwrap();
-                let p = u.as_str().unwrap();
-
+            (FilterExpressionResult::String(s), FilterExpressionResult::String(p)) => {
                 // TODO: fail early if p is known to be invalid
                 let mut cache = self.cache.lock().unwrap();
 
                 match cache.get(p) {
-                    Some(re) => {
-                        FilterExpressionResult::Value(serde_json::Value::Bool(re.is_match(s)))
-                    }
+                    Some(re) => FilterExpressionResult::Bool(re.is_match(s)),
                     None => {
                         if !iregexp::check(p) {
-                            return FilterExpressionResult::Value(serde_json::Value::Bool(false));
+                            return FilterExpressionResult::Bool(false);
                         }
 
                         if let Ok(re) = Regex::new(&map_regex(&p)) {
                             let rv = re.is_match(s);
                             cache.push(p.to_owned(), re);
-                            FilterExpressionResult::Value(serde_json::Value::Bool(rv))
+                            FilterExpressionResult::Bool(rv)
                         } else {
-                            println!("re compilation failed {:#?}", Regex::new(&map_regex(&p)));
-                            FilterExpressionResult::Value(serde_json::Value::Bool(false))
+                            FilterExpressionResult::Bool(false)
                         }
                     }
                 }
             }
-            _ => unreachable!(),
+            _ => FilterExpressionResult::Bool(false),
         }
     }
 
@@ -225,11 +200,11 @@ impl Default for Value {
 }
 
 impl FunctionExtension for Value {
-    fn call(&self, args: Vec<FilterExpressionResult>) -> FilterExpressionResult {
+    fn call<'a>(&self, args: Vec<FilterExpressionResult<'a>>) -> FilterExpressionResult<'a> {
         match args.first().unwrap() {
             FilterExpressionResult::Nodes(nodes) => {
                 if nodes.len() == 1 {
-                    FilterExpressionResult::Value(nodes.first().unwrap().value.clone())
+                    FilterExpressionResult::from_json_value(nodes.first().unwrap().value)
                 } else {
                     FilterExpressionResult::Nothing
                 }

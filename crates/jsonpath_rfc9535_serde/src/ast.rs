@@ -8,7 +8,7 @@
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use serde_json::{Number, Value};
+use serde_json::Value;
 use std::{
     cmp,
     fmt::{self, Write},
@@ -22,7 +22,10 @@ lazy_static! {
     static ref PARSER: JSONPathParser = JSONPathParser::new();
 }
 
-#[derive(Debug, Clone)]
+// TODO: Change location to be a sequence of parts, so as to derive keys
+// TODO: implement fn path to get normalized path from location parts
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Node<'a> {
     pub value: &'a Value,
     pub location: String,
@@ -57,11 +60,39 @@ pub struct FilterContext<'a, 'b> {
     current: &'a Value,
 }
 
-#[derive(Debug)]
+// TODO: UInt
+#[derive(Debug, PartialEq)]
 pub enum FilterExpressionResult<'a> {
-    Value(Value),
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Null,
+    String(String),
+    Array(&'a Value),
+    Object(&'a Value),
     Nodes(NodeList<'a>),
     Nothing,
+}
+
+impl<'a> FilterExpressionResult<'a> {
+    pub fn from_json_value(value: &'a Value) -> Self {
+        match value {
+            Value::Bool(v) => FilterExpressionResult::Bool(*v),
+            Value::Null => FilterExpressionResult::Null,
+            Value::Number(n) => {
+                if n.is_f64() {
+                    FilterExpressionResult::Float(n.as_f64().unwrap())
+                } else if n.is_i64() {
+                    FilterExpressionResult::Int(n.as_i64().unwrap())
+                } else {
+                    FilterExpressionResult::Int(n.as_i64().unwrap()) // XXX:
+                }
+            }
+            Value::String(s) => FilterExpressionResult::String(s.to_owned()),
+            Value::Array(_) => FilterExpressionResult::Array(value),
+            Value::Object(_) => FilterExpressionResult::Object(value),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -416,21 +447,19 @@ impl FilterExpression {
         context: &FilterContext<'a, 'b>,
     ) -> Result<FilterExpressionResult<'a>, JSONPathError> {
         match self {
-            FilterExpression::True => Ok(FilterExpressionResult::Value(Value::Bool(true))),
-            FilterExpression::False => Ok(FilterExpressionResult::Value(Value::Bool(false))),
-            FilterExpression::Null => Ok(FilterExpressionResult::Value(Value::Null)),
+            FilterExpression::True => Ok(FilterExpressionResult::Bool(true)),
+            FilterExpression::False => Ok(FilterExpressionResult::Bool(false)),
+            FilterExpression::Null => Ok(FilterExpressionResult::Null),
             FilterExpression::String { value } => {
-                Ok(FilterExpressionResult::Value(value.as_str().into()))
+                Ok(FilterExpressionResult::String(value.to_owned()))
             }
-            FilterExpression::Int { value } => {
-                Ok(FilterExpressionResult::Value(Number::from(*value).into()))
-            }
-            FilterExpression::Float { value } => Ok(FilterExpressionResult::Value((*value).into())),
+            FilterExpression::Int { value } => Ok(FilterExpressionResult::Int(*value)),
+            FilterExpression::Float { value } => Ok(FilterExpressionResult::Float(*value)),
             FilterExpression::Not { expression } => expression.evaluate(context).map(|rv| {
                 if !is_truthy(rv) {
-                    FilterExpressionResult::Value(Value::Bool(true))
+                    FilterExpressionResult::Bool(true)
                 } else {
-                    FilterExpressionResult::Value(Value::Bool(false))
+                    FilterExpressionResult::Bool(false)
                 }
             }),
             FilterExpression::Logical {
@@ -439,9 +468,9 @@ impl FilterExpression {
                 right,
             } => {
                 if logical(left.evaluate(context)?, operator, right.evaluate(context)?) {
-                    Ok(FilterExpressionResult::Value(Value::Bool(true)))
+                    Ok(FilterExpressionResult::Bool(true))
                 } else {
-                    Ok(FilterExpressionResult::Value(Value::Bool(false)))
+                    Ok(FilterExpressionResult::Bool(false))
                 }
             }
             FilterExpression::Comparison {
@@ -450,9 +479,9 @@ impl FilterExpression {
                 right,
             } => {
                 if compare(left.evaluate(context)?, operator, right.evaluate(context)?) {
-                    Ok(FilterExpressionResult::Value(Value::Bool(true)))
+                    Ok(FilterExpressionResult::Bool(true))
                 } else {
-                    Ok(FilterExpressionResult::Value(Value::Bool(false)))
+                    Ok(FilterExpressionResult::Bool(false))
                 }
             }
             FilterExpression::RelativeQuery { query } => Ok(FilterExpressionResult::Nodes(
@@ -631,7 +660,8 @@ pub fn is_truthy(rv: FilterExpressionResult) -> bool {
     match rv {
         FilterExpressionResult::Nothing => false,
         FilterExpressionResult::Nodes(nodes) => !nodes.is_empty(),
-        FilterExpressionResult::Value(v) => v.as_bool().or(Some(true)).unwrap() == true,
+        FilterExpressionResult::Bool(v) => v == true,
+        _ => true,
     }
 }
 
@@ -639,7 +669,8 @@ pub fn is_truthy_ref(rv: &FilterExpressionResult) -> bool {
     match rv {
         FilterExpressionResult::Nothing => false,
         FilterExpressionResult::Nodes(nodes) => !nodes.is_empty(),
-        FilterExpressionResult::Value(v) => v.as_bool().or(Some(true)).unwrap() == true,
+        FilterExpressionResult::Bool(v) => *v == true,
+        _ => true,
     }
 }
 
@@ -658,7 +689,7 @@ fn nodes_or_singular<'a>(rv: FilterExpressionResult<'a>) -> FilterExpressionResu
     match rv {
         FilterExpressionResult::Nodes(ref nodes) => {
             if nodes.len() == 1 {
-                FilterExpressionResult::Value(nodes.first().unwrap().value.clone())
+                FilterExpressionResult::from_json_value(nodes.first().unwrap().value)
             } else {
                 rv
             }
@@ -676,164 +707,52 @@ fn compare(
     let left = nodes_or_singular(left);
     let right = nodes_or_singular(right);
     match op {
-        Eq => eq((&left, &right)),
-        Ne => !eq((&left, &right)),
-        Lt => lt((&left, &right)),
-        Gt => lt((&right, &left)),
-        Ge => lt((&right, &left)) || eq((&left, &right)),
-        Le => lt((&left, &right)) || eq((&left, &right)),
+        Eq => eq(&left, &right),
+        Ne => !eq(&left, &right),
+        Lt => lt(&left, &right),
+        Gt => lt(&right, &left),
+        Ge => lt(&right, &left) || eq(&left, &right),
+        Le => lt(&left, &right) || eq(&left, &right),
     }
 }
 
-fn eq(pair: (&FilterExpressionResult, &FilterExpressionResult)) -> bool {
+fn eq(left: &FilterExpressionResult, right: &FilterExpressionResult) -> bool {
     use FilterExpressionResult::*;
-    match pair {
-        (Nodes(left), Nodes(right)) => {
-            left.len() == right.len() && left.iter().zip(right).all(|(l, r)| l.value == r.value)
-        }
+    match (left, right) {
+        (Nothing, Nothing) => true,
         (Nodes(nodes), Nothing) | (Nothing, Nodes(nodes)) => nodes.is_empty(),
-        (Nodes(nodes), Value(v)) | (Value(v), Nodes(nodes)) => {
-            if nodes.len() == 1 {
-                let nv = nodes.first().unwrap().value;
-                match (v, nv) {
-                    (serde_json::Value::Number(l), serde_json::Value::Number(r)) => eq_number(l, r),
-                    _ => v.eq(nv),
-                }
+        (Nothing, _) | (_, Nothing) => false,
+        (Nodes(left), Nodes(right)) => {
+            if left.is_empty() && right.is_empty() {
+                true
             } else {
-                false
+                // Only singular queries can be compared
+                unreachable!()
             }
         }
-        (Nothing, Nothing) => true,
-        (Nothing, Value(..)) | (Value(..), Nothing) => false,
-        (Value(left), Value(right)) => match (left, right) {
-            (serde_json::Value::Number(l), serde_json::Value::Number(r)) => eq_number(l, r),
-            _ => left.eq(right),
-        },
-    }
-}
-
-fn eq_number(left: &Number, right: &Number) -> bool {
-    if left.is_f64() && right.is_f64() {
-        return left.as_f64().unwrap() == right.as_f64().unwrap();
-    }
-
-    if left.is_i64() && right.is_i64() {
-        return left.as_i64().unwrap() == right.as_i64().unwrap();
-    }
-
-    if left.is_u64() && right.is_u64() {
-        return left.as_u64().unwrap() == right.as_u64().unwrap();
-    }
-
-    // Float and int comparisons
-    if left.is_f64() && right.is_i64() {
-        return left.as_f64().unwrap() == right.as_i64().unwrap() as f64;
-    }
-
-    if left.is_i64() && right.is_f64() {
-        return (left.as_i64().unwrap() as f64) == right.as_f64().unwrap();
-    }
-
-    // Float and unsigned comparisons
-    if left.is_f64() && right.is_u64() {
-        return left.as_f64().unwrap() == right.as_u64().unwrap() as f64;
-    }
-
-    if left.is_u64() && right.is_f64() {
-        return (left.as_u64().unwrap() as f64) == right.as_f64().unwrap();
-    }
-
-    // Int and unsigned comparisons
-    if left.is_i64() && right.is_u64() {
-        let l = left.as_i64().unwrap();
-        if l < 0 {
-            return false;
-        } else {
-            return (l as u64) == right.as_u64().unwrap();
-        }
-    }
-
-    if left.is_u64() && right.is_i64() {
-        let r = right.as_i64().unwrap();
-        if r < 0 {
-            return false;
-        } else {
-            return left.as_u64().unwrap() == (r as u64);
-        }
-    }
-
-    false
-}
-
-fn lt(pair: (&FilterExpressionResult, &FilterExpressionResult)) -> bool {
-    match pair {
-        (
-            FilterExpressionResult::Value(Value::String(left)),
-            FilterExpressionResult::Value(Value::String(right)),
-        ) => left < right,
-        (
-            FilterExpressionResult::Value(Value::Bool(..)),
-            FilterExpressionResult::Value(Value::Bool(..)),
-        ) => false,
-        (
-            FilterExpressionResult::Value(Value::Number(left)),
-            FilterExpressionResult::Value(Value::Number(right)),
-        ) => lt_number(left, right),
+        (FilterExpressionResult::Int(l), FilterExpressionResult::Int(r)) => l == r,
+        (FilterExpressionResult::Float(l), FilterExpressionResult::Float(r)) => l == r,
+        (FilterExpressionResult::Int(l), FilterExpressionResult::Float(r)) => *l as f64 == *r,
+        (FilterExpressionResult::Float(l), FilterExpressionResult::Int(r)) => *l == *r as f64,
+        (FilterExpressionResult::Null, FilterExpressionResult::Null) => true,
+        (FilterExpressionResult::Bool(l), FilterExpressionResult::Bool(r)) => l == r,
+        (FilterExpressionResult::String(l), FilterExpressionResult::String(r)) => l == r,
+        (FilterExpressionResult::Array(l), FilterExpressionResult::Array(r)) => *l == *r,
+        (FilterExpressionResult::Object(l), FilterExpressionResult::Object(r)) => *l == *r,
         _ => false,
     }
 }
 
-fn lt_number(left: &Number, right: &Number) -> bool {
-    if left.is_f64() && right.is_f64() {
-        return left.as_f64().unwrap() < right.as_f64().unwrap();
+fn lt(left: &FilterExpressionResult, right: &FilterExpressionResult) -> bool {
+    match (left, right) {
+        (FilterExpressionResult::String(l), FilterExpressionResult::String(r)) => l < r,
+        (FilterExpressionResult::Bool(_), FilterExpressionResult::Bool(_)) => false,
+        (FilterExpressionResult::Int(l), FilterExpressionResult::Int(r)) => l < r,
+        (FilterExpressionResult::Float(l), FilterExpressionResult::Float(r)) => l < r,
+        (FilterExpressionResult::Int(l), FilterExpressionResult::Float(r)) => (*l as f64) < *r,
+        (FilterExpressionResult::Float(l), FilterExpressionResult::Int(r)) => *l < *r as f64,
+        _ => false,
     }
-
-    if left.is_i64() && right.is_i64() {
-        return left.as_i64().unwrap() < right.as_i64().unwrap();
-    }
-
-    if left.is_u64() && right.is_u64() {
-        return left.as_u64().unwrap() < right.as_u64().unwrap();
-    }
-
-    // Float and int comparisons
-    if left.is_f64() && right.is_i64() {
-        return left.as_f64().unwrap() < right.as_i64().unwrap() as f64;
-    }
-
-    if left.is_i64() && right.is_f64() {
-        return (left.as_i64().unwrap() as f64) < right.as_f64().unwrap();
-    }
-
-    // Float and unsigned comparisons
-    if left.is_f64() && right.is_u64() {
-        return left.as_f64().unwrap() < right.as_u64().unwrap() as f64;
-    }
-
-    if left.is_u64() && right.is_f64() {
-        return (left.as_u64().unwrap() as f64) < right.as_f64().unwrap();
-    }
-
-    // Int and unsigned comparisons
-    if left.is_i64() && right.is_u64() {
-        let l = left.as_i64().unwrap();
-        if l < 0 {
-            return true;
-        } else {
-            return (l as u64) < right.as_u64().unwrap();
-        }
-    }
-
-    if left.is_u64() && right.is_i64() {
-        let r = right.as_i64().unwrap();
-        if r < 0 {
-            return false;
-        } else {
-            return left.as_u64().unwrap() < (r as u64);
-        }
-    }
-
-    false
 }
 
 fn unpack_result<'a>(
@@ -848,8 +767,8 @@ fn unpack_result<'a>(
     match &rv {
         FilterExpressionResult::Nodes(nodes) => match nodes.len() {
             0 => Ok(FilterExpressionResult::Nothing),
-            1 => Ok(FilterExpressionResult::Value(
-                nodes.first().unwrap().value.clone(),
+            1 => Ok(FilterExpressionResult::from_json_value(
+                nodes.first().unwrap().value,
             )),
             _ => Ok(rv),
         },
