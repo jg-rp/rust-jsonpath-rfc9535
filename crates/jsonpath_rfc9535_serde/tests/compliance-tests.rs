@@ -41,7 +41,8 @@ struct Case {
 
 #[test]
 fn compliance() -> Result<(), Box<dyn Error>> {
-    let file = File::open("/tmp/cts.json")?;
+    // Path is relative to the crate root, crates/jsonpath_rfc9535_serde in this case.
+    let file = File::open("../../cts/cts.json")?;
     let reader = BufReader::new(file);
     let test_suite: TestSuite = serde_json::from_reader(reader)?;
 
