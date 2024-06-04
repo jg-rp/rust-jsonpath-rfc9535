@@ -1,4 +1,3 @@
-#![feature(result_flattening)]
 pub mod ast;
 pub mod env;
 pub mod errors;

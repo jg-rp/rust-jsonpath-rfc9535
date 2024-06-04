@@ -121,6 +121,7 @@ impl Query {
             })
     }
 
+    // Same as `find`, but uses explicit `for` loops and vectors to collect intermediate nodes.
     pub fn find_loop<'a, 'b>(
         &self,
         value: &'a Value,
