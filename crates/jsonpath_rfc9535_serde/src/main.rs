@@ -39,7 +39,7 @@ struct Case {
 }
 
 fn flame() -> Result<(), Box<dyn Error>> {
-    let file = File::open("/tmp/cts.json")?;
+    let file = File::open("cts/cts.json")?;
     let reader = BufReader::new(file);
     let test_suite: TestSuite = serde_json::from_reader(reader)?;
 

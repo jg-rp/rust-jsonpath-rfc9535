@@ -1,3 +1,4 @@
+#![feature(result_flattening)]
 pub mod ast;
 pub mod env;
 pub mod errors;
@@ -8,4 +9,5 @@ pub mod standard_functions;
 
 pub use ast::Query;
 pub use jsonpath::find;
+pub use jsonpath::find_loop;
 pub use parser::JSONPathParser;

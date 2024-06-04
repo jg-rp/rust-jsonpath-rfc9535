@@ -1,6 +1,6 @@
 use std::{collections::HashSet, error::Error, fs::File, io::BufReader};
 
-use jsonpath_rfc9535_serde::{jsonpath::find, Query};
+use jsonpath_rfc9535_serde::{find_loop, jsonpath::find, Query};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -63,6 +63,38 @@ fn compliance() -> Result<(), Box<dyn Error>> {
             ()
         } else {
             let rv = find(&case.selector, &case.document)?;
+            let values: Vec<Value> = rv.iter().map(|n| n.value.clone()).collect();
+            assert_eq!(values, case.result, "{}: {}", case.name, case.selector);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn compliance_loop() -> Result<(), Box<dyn Error>> {
+    // Path is relative to the crate root, crates/jsonpath_rfc9535_serde in this case.
+    let file = File::open("../../cts/cts.json")?;
+    let reader = BufReader::new(file);
+    let test_suite: TestSuite = serde_json::from_reader(reader)?;
+
+    for case in test_suite.tests {
+        if SKIP.contains(case.name.as_str()) {
+            println!("SKIPPING {}", case.name);
+            continue;
+        }
+
+        println!("{}", case.name);
+        if case.invalid_selector {
+            assert!(
+                Query::standard(&case.selector).is_err(),
+                "{} did not fail",
+                case.name
+            );
+        } else if case.results.len() > 0 {
+            ()
+        } else {
+            let rv = find_loop(&case.selector, &case.document)?;
             let values: Vec<Value> = rv.iter().map(|n| n.value.clone()).collect();
             assert_eq!(values, case.result, "{}: {}", case.name, case.selector);
         }

@@ -10,3 +10,8 @@ pub fn find<'a>(expr: &str, value: &'a Value) -> Result<NodeList<'a>, JSONPathEr
     let query = Query::standard(expr)?;
     query.find(value, &ENV)
 }
+
+pub fn find_loop<'a>(expr: &str, value: &'a Value) -> Result<NodeList<'a>, JSONPathError> {
+    let query = Query::standard(expr)?;
+    query.find_loop(value, &ENV)
+}

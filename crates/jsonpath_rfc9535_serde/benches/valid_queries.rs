@@ -98,4 +98,20 @@ mod tests {
             }
         })
     }
+
+    #[bench]
+    fn bench_just_find_loop(b: &mut Bencher) {
+        let compiled_queries = VALID_QUERIES
+            .iter()
+            .map(|case| (Query::standard(&case.selector).unwrap(), &case.document))
+            .collect::<Vec<(Query, &Value)>>();
+
+        let env = Environment::new();
+
+        b.iter(|| {
+            for (q, v) in compiled_queries.iter() {
+                q.find_loop(v, &env).unwrap();
+            }
+        })
+    }
 }

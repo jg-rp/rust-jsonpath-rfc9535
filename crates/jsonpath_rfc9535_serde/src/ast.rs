@@ -5,7 +5,6 @@
 //! filter selector is a tree of [`FilterExpression`]s.
 //!
 //! [RFC 9535]: https://datatracker.ietf.org/doc/html/rfc9535
-
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use serde_json::Value;
@@ -52,12 +51,6 @@ pub type NodeList<'a> = Vec<Node<'a>>;
 struct QueryContext<'a, 'b> {
     env: &'b Environment,
     root: &'a Value,
-}
-
-pub struct FilterContext<'a, 'b> {
-    env: &'b Environment,
-    root: &'a Value,
-    current: &'a Value,
 }
 
 // TODO: UInt
@@ -128,6 +121,25 @@ impl Query {
             })
     }
 
+    pub fn find_loop<'a, 'b>(
+        &self,
+        value: &'a Value,
+        env: &'b Environment,
+    ) -> Result<NodeList<'a>, JSONPathError> {
+        let context = QueryContext { root: value, env };
+
+        let mut nodes: NodeList<'a> = vec![Node {
+            value,
+            location: String::from("$"),
+        }];
+
+        for segment in self.segments.iter() {
+            nodes = segment.resolve_loop(nodes, &context)?;
+        }
+
+        Ok(nodes)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.segments.is_empty()
     }
@@ -186,6 +198,34 @@ impl Segment {
                 .collect(),
             Segment::Eoi {} => Ok(nodes),
         }
+    }
+
+    fn resolve_loop<'a>(
+        &self,
+        nodes: NodeList<'a>,
+        context: &QueryContext,
+    ) -> Result<NodeList<'a>, JSONPathError> {
+        let mut _nodes: NodeList<'a> = Vec::new();
+        match self {
+            Segment::Child { selectors } => {
+                for node in nodes.iter() {
+                    for selector in selectors {
+                        _nodes.extend(selector.resolve(node, context)?)
+                    }
+                }
+            }
+            Segment::Recursive { selectors } => {
+                for node in nodes.iter() {
+                    for _node in visit(node).iter() {
+                        for selector in selectors {
+                            _nodes.extend(selector.resolve_loop(_node, context)?)
+                        }
+                    }
+                }
+            }
+            Segment::Eoi {} => _nodes = nodes,
+        }
+        Ok(_nodes)
     }
 }
 
@@ -290,35 +330,81 @@ impl Selector {
                 Value::Array(arr) => arr
                     .iter()
                     .enumerate()
-                    .map(|(i, v)| {
-                        expression
-                            .evaluate(&FilterContext {
-                                root: context.root,
-                                current: v,
-                                env: context.env,
-                            })
-                            .map(|r| (i, v, r))
-                    })
+                    .map(|(i, v)| expression.evaluate(v, context).map(|r| (i, v, r)))
                     .filter_ok(|(_, _, r)| is_truthy_ref(r))
                     .map_ok(|(i, v, _)| node.new_child_element(v, i))
                     .collect(),
                 Value::Object(obj) => obj
                     .iter()
-                    .map(|(k, v)| {
-                        expression
-                            .evaluate(&FilterContext {
-                                root: context.root,
-                                current: v,
-                                env: context.env,
-                            })
-                            .map(|r| (k, v, r))
-                    })
+                    .map(|(k, v)| expression.evaluate(v, context).map(|r| (k, v, r)))
                     .filter_ok(|(_, _, r)| is_truthy_ref(r))
                     .map_ok(|(k, v, _)| node.new_child_member(v, k))
                     .collect(),
                 _ => Ok(Vec::new()),
             },
         }
+    }
+
+    fn resolve_loop<'a, 'b>(
+        &self,
+        node: &'b Node<'a>,
+        context: &QueryContext,
+    ) -> Result<NodeList<'a>, JSONPathError> {
+        let mut nodes: NodeList = Vec::new();
+        match self {
+            Selector::Name { name } => {
+                if let Some(v) = node.value.get(name) {
+                    nodes.push(node.new_child_member(v, name));
+                }
+            }
+            Selector::Index { index } => {
+                if let Some(array) = node.value.as_array() {
+                    let norm = norm_index(*index, array.len());
+                    if let Some(v) = array.get(norm) {
+                        nodes.push(node.new_child_element(v, norm));
+                    }
+                }
+            }
+            Selector::Slice { start, stop, step } => {
+                if let Some(array) = node.value.as_array() {
+                    for (i, element) in slice(array, *start, *stop, *step) {
+                        nodes.push(node.new_child_element(element, i as usize));
+                    }
+                }
+            }
+            Selector::Wild {} => match node.value {
+                Value::Array(array) => {
+                    for (i, element) in array.iter().enumerate() {
+                        nodes.push(node.new_child_element(element, i));
+                    }
+                }
+                Value::Object(obj) => {
+                    for (k, v) in obj {
+                        nodes.push(node.new_child_member(v, k));
+                    }
+                }
+                _ => (),
+            },
+            Selector::Filter { expression } => match node.value {
+                Value::Array(array) => {
+                    for (i, element) in array.iter().enumerate() {
+                        if is_truthy(expression.evaluate(element, context)?) {
+                            nodes.push(node.new_child_element(element, i));
+                        }
+                    }
+                }
+                Value::Object(obj) => {
+                    for (k, v) in obj {
+                        if is_truthy(expression.evaluate(v, context)?) {
+                            nodes.push(node.new_child_member(v, k));
+                        }
+                    }
+                }
+
+                _ => (),
+            },
+        }
+        Ok(nodes)
     }
 }
 
@@ -444,7 +530,8 @@ impl FilterExpression {
 impl FilterExpression {
     fn evaluate<'a, 'b: 'a>(
         &self,
-        context: &FilterContext<'a, 'b>,
+        current: &'a Value,
+        context: &QueryContext<'a, 'b>,
     ) -> Result<FilterExpressionResult<'a>, JSONPathError> {
         match self {
             FilterExpression::True => Ok(FilterExpressionResult::Bool(true)),
@@ -455,19 +542,25 @@ impl FilterExpression {
             }
             FilterExpression::Int { value } => Ok(FilterExpressionResult::Int(*value)),
             FilterExpression::Float { value } => Ok(FilterExpressionResult::Float(*value)),
-            FilterExpression::Not { expression } => expression.evaluate(context).map(|rv| {
-                if !is_truthy(rv) {
-                    FilterExpressionResult::Bool(true)
-                } else {
-                    FilterExpressionResult::Bool(false)
-                }
-            }),
+            FilterExpression::Not { expression } => {
+                expression.evaluate(current, context).map(|rv| {
+                    if !is_truthy(rv) {
+                        FilterExpressionResult::Bool(true)
+                    } else {
+                        FilterExpressionResult::Bool(false)
+                    }
+                })
+            }
             FilterExpression::Logical {
                 left,
                 operator,
                 right,
             } => {
-                if logical(left.evaluate(context)?, operator, right.evaluate(context)?) {
+                if logical(
+                    left.evaluate(current, context)?,
+                    operator,
+                    right.evaluate(current, context)?,
+                ) {
                     Ok(FilterExpressionResult::Bool(true))
                 } else {
                     Ok(FilterExpressionResult::Bool(false))
@@ -478,14 +571,18 @@ impl FilterExpression {
                 operator,
                 right,
             } => {
-                if compare(left.evaluate(context)?, operator, right.evaluate(context)?) {
+                if compare(
+                    left.evaluate(current, context)?,
+                    operator,
+                    right.evaluate(current, context)?,
+                ) {
                     Ok(FilterExpressionResult::Bool(true))
                 } else {
                     Ok(FilterExpressionResult::Bool(false))
                 }
             }
             FilterExpression::RelativeQuery { query } => Ok(FilterExpressionResult::Nodes(
-                query.find(context.current, context.env)?,
+                query.find(current, context.env)?,
             )),
             FilterExpression::RootQuery { query } => Ok(FilterExpressionResult::Nodes(
                 query.find(context.root, context.env)?,
@@ -497,7 +594,7 @@ impl FilterExpression {
 
                 let _args: Result<Vec<_>, _> = args
                     .iter()
-                    .map(|expr| expr.evaluate(context))
+                    .map(|expr| expr.evaluate(current, context))
                     .enumerate()
                     .map(|(i, rv)| unpack_result(rv?, &fn_ext.sig().param_types, i))
                     .collect();

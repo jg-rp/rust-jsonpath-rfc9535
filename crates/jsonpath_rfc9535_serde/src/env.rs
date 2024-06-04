@@ -32,4 +32,13 @@ impl Environment {
         let query = Query::standard(expr)?;
         query.find(value, &self)
     }
+
+    pub fn find_loop<'a>(
+        &self,
+        expr: &str,
+        value: &'a serde_json::Value,
+    ) -> Result<NodeList<'a>, JSONPathError> {
+        let query = Query::standard(expr)?;
+        query.find_loop(value, &self)
+    }
 }
