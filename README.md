@@ -1,12 +1,11 @@
 # Rust JSONPath RFC 9535
 
-Three different JSONPath expression parsers producing a JSON implementation agnostic abstract syntax tree, following the JSONPath model described in RFC 9535.
+An exploration of JSONPath parsing and evaluation in Rust with Python bindings in mind.
 
-- `crates/jsonpath_rfc9535` is a hand-crafted lexer and parser for JSONPath.
+- `crates/jsonpath_rfc9535` is a hand-crafted lexer and parser for JSONPath producing a JSON implementation agnostic abstract syntax tree, following the JSONPath model described in RFC 9535.
 - `crates/jsonpath_rfc9535_pest` is a [pest](https://github.com/pest-parser)-based JSONPath parser, producing a similar AST to the hand-crafted parser.
-- `crates/jsonpath_rfc9535_pest_recursive` is the pest parser producing an AST structured with recursive segments rather than a vector of segments. This structure is inspired by the stalled [jsonpath-reference-implementation](https://github.com/jsonpath-standard/jsonpath-reference-implementation), and lends itself more easily to an iterator interface.
-
-All three were written with Python bindings in mind and forked into [JPQ](https://github.com/jg-rp/jpq). They are now kept here for reference and to compare performance between the three lexing/parsing approaches.
+- `crates/jsonpath_rfc9535_pest_recursive` is the pest parser producing an AST structured with recursive segments rather than a vector of segments. This structure is inspired by the stalled [jsonpath-reference-implementation](https://github.com/jsonpath-standard/jsonpath-reference-implementation).
+- `crates/jsonpath_rfc9535_serde` implements JSONPath evaluation using serde JSON, based on the pest parser.
 
 ## Hand-crafted parser
 
@@ -151,16 +150,25 @@ Without attempting to optimize the grammar, the pest-based parser benchmarks at 
 
 When benchmarking [JPQ](https://github.com/jg-rp/jpq) with the pest parser, this translates to a slowdown of between 0.03 and 0.04 seconds (409 queries repeated 100 times) during the compile phase. This seems like a good tradeoff.
 
+Benchmarking `crates/jsonpath_rfc9535_serde` on an M2 Mac Mini we get the following results:
+
+```
+test tests::bench_compile_and_find        ... bench:     789,637 ns/iter (+/- 33,289)
+test tests::bench_compile_and_find_values ... bench:     793,870 ns/iter (+/- 5,057)
+test tests::bench_just_compile            ... bench:     526,270 ns/iter (+/- 2,064)
+test tests::bench_just_find               ... bench:     243,718 ns/iter (+/- 1,709)
+test tests::bench_just_find_loop          ... bench:     235,477 ns/iter (+/- 1,893)
+```
+
+Which shows a 2x performance improvement using Serde JSON over JPQ.
+
+The last two lines show an insignificant difference in performance between code that uses explicit `for` loops and vectors to collect nodes vs extensive use of iterator adapters and `collect()`.
+
 ## Contributing
 
 ### Development
 
-We're using a Rust [workspace](https://doc.rust-lang.org/cargo/reference/workspaces.html) with two crates.
-
-- `crates/jsonpath_rfc9535_pest` is a [pest](https://github.com/pest-parser)-based JSONPath parser.
-- `crates/jsonpath_rfc9535` is a hand-crafted lexer and parser for JSONPath.
-
-`crates/jsonpath_rfc9535` is the default workspace member. Use the `-p jsonpath_rfc9535_pest` or `--package jsonpath_rfc9535_pest` option to select the `jsonpath_rfc9535_pest` crate.
+We're using a Rust [workspace](https://doc.rust-lang.org/cargo/reference/workspaces.html) with `crates/jsonpath_rfc9535` being the default workspace member. Use the `-p` or `--package` option when using `cargo` to select a different crate.
 
 Run tests with cargo.
 
