@@ -132,6 +132,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonpath_rfc9535_iter"
+version = "0.1.0"
+dependencies = [
+ "iregexp",
+ "itertools",
+ "lazy_static",
+ "lru",
+ "pest",
+ "pest_derive",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "jsonpath_rfc9535_pest"
 version = "0.1.0"
 dependencies = [
