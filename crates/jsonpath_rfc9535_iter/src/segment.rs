@@ -67,16 +67,11 @@ pub fn visit_iter<'v>(node: Rc<Node<'v>>) -> NodeIter<'v> {
 
 pub fn descendants<'v>(node: Rc<Node<'v>>) -> NodeIter<'v> {
     match node.value {
-        Value::Object(obj) => {
-            Box::new(
-            obj.iter()
-                .flat_map(move|(k, v)| {
-                    let child = node.new_child_member(v, k);
-                    iter::once(child.clone()).chain(descendants(child))
-                }),
-        )
-    }
-        
+        Value::Object(obj) => Box::new(obj.iter().flat_map(move |(k, v)| {
+            let child = node.new_child_member(v, k);
+            iter::once(child.clone()).chain(descendants(child))
+        })),
+
         Value::Array(arr) => Box::new(arr.iter().enumerate().flat_map(move |(i, e)| {
             let child = node.new_child_element(e, i);
             iter::once(child.clone()).chain(descendants(child))

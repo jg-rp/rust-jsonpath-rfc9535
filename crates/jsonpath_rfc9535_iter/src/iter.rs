@@ -1,4 +1,9 @@
-use std::{iter::{self, Enumerate}, rc::Rc, slice::Iter, vec::IntoIter};
+use std::{
+    iter::{self, Enumerate},
+    rc::Rc,
+    slice::Iter,
+    vec::IntoIter,
+};
 
 use serde_json::{Map, Value};
 
@@ -26,7 +31,10 @@ impl<'v> QueryIter<'v> {
     pub fn new(env: Rc<Environment>, root: &'v Value, query: Query) -> Self {
         let init = SegmentIter {
             selectors: vec![].into_iter(),
-            it: Box::new(iter::once(Rc::new(Node{value: root, location: String::from("$")}))),
+            it: Box::new(iter::once(Rc::new(Node {
+                value: root,
+                location: String::from("$"),
+            }))),
         };
 
         let it = query
@@ -69,6 +77,9 @@ impl<'v> SegmentIter<'v> {
         segment: Segment,
         nodes: NodeIter<'v>,
     ) -> Self {
+        // TODO: ChildSegmentIter and DescendantSegmentIter
+        // TODO: segment iters own nodes, without Rc.#
+        // TODO: try moving SelectorIter construction to next()
         let mut its: Vec<SelectorIter<'v>> = Vec::new();
         match segment {
             Segment::Child { ref selectors } => {
@@ -87,7 +98,12 @@ impl<'v> SegmentIter<'v> {
                 for node in nodes {
                     for _node in visit_iter(node) {
                         for selector in selectors {
-                            its.push(SelectorIter::new(env.clone(), root, selector.clone(), _node.clone()))
+                            its.push(SelectorIter::new(
+                                env.clone(),
+                                root,
+                                selector.clone(),
+                                _node.clone(),
+                            ))
                         }
                     }
                 }
@@ -141,23 +157,41 @@ impl<'v> SelectorIter<'v> {
             Selector::Slice { start, stop, step } => {
                 if let Some(array) = node.value.as_array() {
                     // TODO: lazy slice
-                    Box::new(slice(array, start, stop, step).into_iter().map(move |(i, v)| node.new_child_element(v, i as usize)))
+                    Box::new(
+                        slice(array, start, stop, step)
+                            .into_iter()
+                            .map(move |(i, v)| node.new_child_element(v, i as usize)),
+                    )
                 } else {
                     Box::new(iter::empty())
                 }
             }
             Selector::Wild {} => match node.value {
-                Value::Array(arr) => Box::new(arr.iter().enumerate().map(move |(i, v)| node.new_child_element(v, i))),
-                Value::Object(obj) => Box::new(obj.iter().map(move |(k, v)| node.new_child_member(v, k))),
+                Value::Array(arr) => Box::new(
+                    arr.iter()
+                        .enumerate()
+                        .map(move |(i, v)| node.new_child_element(v, i)),
+                ),
+                Value::Object(obj) => {
+                    Box::new(obj.iter().map(move |(k, v)| node.new_child_member(v, k)))
+                }
                 _ => Box::new(iter::empty()),
             },
             Selector::Filter { expression } => match node.value {
-                Value::Array(arr) => {
-                    Box::new(ArrayFilterIter::new(env.clone(), root, *expression, &arr, node))
-                }
-                Value::Object(obj) => {
-                    Box::new(ObjectFilterIter::new(env.clone(), root, *expression, &obj, node))
-                }
+                Value::Array(arr) => Box::new(ArrayFilterIter::new(
+                    env.clone(),
+                    root,
+                    *expression,
+                    &arr,
+                    node,
+                )),
+                Value::Object(obj) => Box::new(ObjectFilterIter::new(
+                    env.clone(),
+                    root,
+                    *expression,
+                    &obj,
+                    node,
+                )),
                 _ => Box::new(iter::empty()),
             },
         };

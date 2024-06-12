@@ -5,7 +5,7 @@ use serde_json::Value;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Node<'a> {
     pub value: &'a Value,
-    pub location: String, // TODO: cow
+    pub location: String,
 }
 
 impl<'a> Node<'a> {
