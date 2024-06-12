@@ -10,4 +10,5 @@ fn main() {
     let q = "$.features..properties";
     let rv = find(q, &v).unwrap();
     println!("{:?}", rv.len());
+    // println!("{:?}", v.is_object())
 }

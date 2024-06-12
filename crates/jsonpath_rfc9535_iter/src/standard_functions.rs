@@ -204,7 +204,7 @@ impl FunctionExtension for Value {
         match args.first().unwrap() {
             FilterExpressionResult::Nodes(nodes) => {
                 if nodes.len() == 1 {
-                    FilterExpressionResult::from_json_value(nodes.first().unwrap())
+                    FilterExpressionResult::from_json_value(nodes.first().unwrap().value)
                 } else {
                     FilterExpressionResult::Nothing
                 }

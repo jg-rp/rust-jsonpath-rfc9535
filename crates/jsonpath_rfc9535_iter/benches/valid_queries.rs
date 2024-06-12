@@ -7,7 +7,7 @@ mod tests {
     use lazy_static::lazy_static;
     use std::{fs::File, io::BufReader, rc::Rc};
 
-    use jsonpath_rfc9535_iter::{env::Environment, iter::QueryIter, Query};
+    use jsonpath_rfc9535_iter::{env::Environment, iter::QueryIter, node::NodeList, Query};
     use serde::{Deserialize, Serialize};
     use serde_json::Value;
     use test::Bencher;
@@ -58,7 +58,7 @@ mod tests {
         b.iter(|| {
             for case in VALID_QUERIES.iter() {
                 let query = Query::standard(&case.selector).unwrap();
-                let _ = QueryIter::new(env.clone(), &case.document, query).collect::<Vec<&Value>>();
+                let _ = QueryIter::new(env.clone(), &case.document, query).collect::<NodeList>();
             }
         })
     }

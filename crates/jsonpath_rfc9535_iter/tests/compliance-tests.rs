@@ -63,7 +63,7 @@ fn compliance() -> Result<(), Box<dyn Error>> {
             ()
         } else {
             let rv = find(&case.selector, &case.document)?;
-            let values: Vec<Value> = rv.cloned().collect();
+            let values: Vec<Value> = rv.map(|node| node.value).cloned().collect();
             assert_eq!(values, case.result, "{}: {}", case.name, case.selector);
         }
     }

@@ -302,7 +302,7 @@ fn nodes_or_singular<'a>(rv: FilterExpressionResult<'a>) -> FilterExpressionResu
     match rv {
         FilterExpressionResult::Nodes(ref nodes) => {
             if nodes.len() == 1 {
-                FilterExpressionResult::from_json_value(nodes.first().unwrap())
+                FilterExpressionResult::from_json_value(nodes.first().unwrap().value)
             } else {
                 rv
             }
@@ -380,7 +380,7 @@ fn unpack_result<'v>(
     match &rv {
         FilterExpressionResult::Nodes(values) => match values.len() {
             0 => FilterExpressionResult::Nothing,
-            1 => FilterExpressionResult::from_json_value(values.first().unwrap()),
+            1 => FilterExpressionResult::from_json_value(values.first().unwrap().value),
             _ => rv,
         },
         _ => rv,
