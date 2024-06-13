@@ -26,5 +26,3 @@ impl<'a> Node<'a> {
 
 pub type NodeList<'v> = Vec<Rc<Node<'v>>>;
 pub type NodeIter<'v> = Box<dyn Iterator<Item = Rc<Node<'v>>> + 'v>;
-
-// TODO: cow Rc<Node> / Node

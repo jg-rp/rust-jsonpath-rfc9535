@@ -28,7 +28,7 @@ impl<'v> Iterator for QueryIter<'v> {
 }
 
 impl<'v> QueryIter<'v> {
-    pub fn new(env: Rc<Environment>, root: &'v Value, query: Query) -> Self {
+    pub fn new(env: &'static Environment, root: &'v Value, query: Query) -> Self {
         let init = SegmentIter {
             selectors: vec![].into_iter(),
             it: Box::new(iter::once(Rc::new(Node {
@@ -42,7 +42,7 @@ impl<'v> QueryIter<'v> {
             .into_iter()
             .filter(|s| !matches!(s, Segment::Eoi {}))
             .fold(init, |values, segment| {
-                SegmentIter::new(env.clone(), root, segment, Box::new(values))
+                SegmentIter::new(env, root, segment, Box::new(values))
             });
 
         Self { it: Box::new(it) }
@@ -72,25 +72,17 @@ impl<'v> Iterator for SegmentIter<'v> {
 
 impl<'v> SegmentIter<'v> {
     pub fn new(
-        env: Rc<Environment>,
+        env: &'static Environment,
         root: &'v Value,
         segment: Segment,
         nodes: NodeIter<'v>,
     ) -> Self {
-        // TODO: ChildSegmentIter and DescendantSegmentIter
-        // TODO: segment iters own nodes, without Rc.#
-        // TODO: try moving SelectorIter construction to next()
         let mut its: Vec<SelectorIter<'v>> = Vec::new();
         match segment {
             Segment::Child { ref selectors } => {
                 for node in nodes {
                     for selector in selectors {
-                        its.push(SelectorIter::new(
-                            env.clone(),
-                            root,
-                            selector.clone(),
-                            node.clone(),
-                        ))
+                        its.push(SelectorIter::new(env, root, selector.clone(), node.clone()))
                     }
                 }
             }
@@ -99,7 +91,7 @@ impl<'v> SegmentIter<'v> {
                     for _node in visit_iter(node) {
                         for selector in selectors {
                             its.push(SelectorIter::new(
-                                env.clone(),
+                                env,
                                 root,
                                 selector.clone(),
                                 _node.clone(),
@@ -133,7 +125,12 @@ impl<'v> Iterator for SelectorIter<'v> {
 }
 
 impl<'v> SelectorIter<'v> {
-    fn new(env: Rc<Environment>, root: &'v Value, selector: Selector, node: Rc<Node<'v>>) -> Self {
+    fn new(
+        env: &'static Environment,
+        root: &'v Value,
+        selector: Selector,
+        node: Rc<Node<'v>>,
+    ) -> Self {
         let it: NodeIter<'v> = match selector {
             Selector::Name { ref name } => {
                 if let Some(v) = node.value.get(name) {
@@ -178,20 +175,12 @@ impl<'v> SelectorIter<'v> {
                 _ => Box::new(iter::empty()),
             },
             Selector::Filter { expression } => match node.value {
-                Value::Array(arr) => Box::new(ArrayFilterIter::new(
-                    env.clone(),
-                    root,
-                    *expression,
-                    &arr,
-                    node,
-                )),
-                Value::Object(obj) => Box::new(ObjectFilterIter::new(
-                    env.clone(),
-                    root,
-                    *expression,
-                    &obj,
-                    node,
-                )),
+                Value::Array(arr) => {
+                    Box::new(ArrayFilterIter::new(env, root, *expression, &arr, node))
+                }
+                Value::Object(obj) => {
+                    Box::new(ObjectFilterIter::new(env, root, *expression, &obj, node))
+                }
                 _ => Box::new(iter::empty()),
             },
         };
@@ -201,7 +190,7 @@ impl<'v> SelectorIter<'v> {
 }
 
 pub struct ArrayFilterIter<'v> {
-    env: Rc<Environment>,
+    env: &'static Environment,
     root: &'v Value,
     expr: FilterExpression,
     it: Enumerate<Iter<'v, Value>>,
@@ -213,7 +202,7 @@ impl<'v> Iterator for ArrayFilterIter<'v> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.it.next() {
             Some((index, value)) => {
-                if is_truthy(self.expr.evaluate(self.env.clone(), self.root, value)) {
+                if is_truthy(self.expr.evaluate(self.env, self.root, value)) {
                     Some(self.parent.new_child_element(value, index))
                 } else {
                     self.next()
@@ -226,14 +215,14 @@ impl<'v> Iterator for ArrayFilterIter<'v> {
 
 impl<'v> ArrayFilterIter<'v> {
     fn new(
-        env: Rc<Environment>,
+        env: &'static Environment,
         root: &'v Value,
         expr: FilterExpression,
         arr: &'v Vec<Value>,
         node: Rc<Node<'v>>,
     ) -> Self {
         Self {
-            env: env.clone(),
+            env,
             root,
             expr,
             it: arr.iter().enumerate(),
@@ -243,7 +232,7 @@ impl<'v> ArrayFilterIter<'v> {
 }
 
 pub struct ObjectFilterIter<'v> {
-    env: Rc<Environment>,
+    env: &'static Environment,
     root: &'v Value,
     expr: FilterExpression,
     it: serde_json::map::Iter<'v>,
@@ -255,7 +244,7 @@ impl<'v> Iterator for ObjectFilterIter<'v> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.it.next() {
             Some((k, v)) => {
-                if is_truthy(self.expr.evaluate(self.env.clone(), self.root, v)) {
+                if is_truthy(self.expr.evaluate(self.env, self.root, v)) {
                     Some(self.parent.new_child_member(v, k))
                 } else {
                     self.next()
@@ -268,7 +257,7 @@ impl<'v> Iterator for ObjectFilterIter<'v> {
 
 impl<'v> ObjectFilterIter<'v> {
     fn new(
-        env: Rc<Environment>,
+        env: &'static Environment,
         root: &'v Value,
         expr: FilterExpression,
         obj: &'v Map<String, Value>,

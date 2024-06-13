@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, rc::Rc};
+use std::{collections::HashMap, fmt::Debug};
 
 use crate::filter::FilterExpressionResult;
 
@@ -72,4 +72,4 @@ impl Debug for dyn FunctionExtension + Sync {
     }
 }
 
-pub type FunctionRegister = HashMap<String, Rc<dyn FunctionExtension + Sync>>;
+pub type FunctionRegister = HashMap<String, Box<dyn FunctionExtension + Sync>>;

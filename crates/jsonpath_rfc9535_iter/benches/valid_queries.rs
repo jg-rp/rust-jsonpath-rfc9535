@@ -5,9 +5,9 @@ extern crate test;
 #[cfg(test)]
 mod tests {
     use lazy_static::lazy_static;
-    use std::{fs::File, io::BufReader, rc::Rc};
+    use std::{fs::File, io::BufReader};
 
-    use jsonpath_rfc9535_iter::{env::Environment, iter::QueryIter, node::NodeList, Query};
+    use jsonpath_rfc9535_iter::{find, node::NodeList, Query};
     use serde::{Deserialize, Serialize};
     use serde_json::Value;
     use test::Bencher;
@@ -54,11 +54,9 @@ mod tests {
 
     #[bench]
     fn bench_compile_and_find(b: &mut Bencher) {
-        let env = Rc::new(Environment::new());
         b.iter(|| {
             for case in VALID_QUERIES.iter() {
-                let query = Query::standard(&case.selector).unwrap();
-                let _ = QueryIter::new(env.clone(), &case.document, query).collect::<NodeList>();
+                let _it: NodeList = find(&case.selector, &case.document).unwrap().collect();
             }
         })
     }

@@ -1,4 +1,4 @@
-use std::{fmt, rc::Rc};
+use std::fmt;
 
 use serde_json::Value;
 
@@ -62,7 +62,7 @@ impl FilterExpression {
 impl FilterExpression {
     pub fn evaluate<'a: 'v, 'v>(
         &'a self,
-        env: Rc<Environment>,
+        env: &'static Environment,
         root: &'v Value,
         current: &'v Value,
     ) -> FilterExpressionResult<'v> {
@@ -74,7 +74,7 @@ impl FilterExpression {
             FilterExpression::Int { value } => FilterExpressionResult::Int(*value),
             FilterExpression::Float { value } => FilterExpressionResult::Float(*value),
             FilterExpression::Not { expression } => {
-                if !is_truthy(expression.evaluate(env.clone(), root, current)) {
+                if !is_truthy(expression.evaluate(env, root, current)) {
                     FilterExpressionResult::Bool(true)
                 } else {
                     FilterExpressionResult::Bool(false)
@@ -86,9 +86,9 @@ impl FilterExpression {
                 right,
             } => {
                 if logical(
-                    left.evaluate(env.clone(), root, current),
+                    left.evaluate(env, root, current),
                     operator,
-                    right.evaluate(env.clone(), root, current),
+                    right.evaluate(env, root, current),
                 ) {
                     FilterExpressionResult::Bool(true)
                 } else {
@@ -101,9 +101,9 @@ impl FilterExpression {
                 right,
             } => {
                 if compare(
-                    left.evaluate(env.clone(), root, current),
+                    left.evaluate(env, root, current),
                     operator,
-                    right.evaluate(env.clone(), root, current),
+                    right.evaluate(env, root, current),
                 ) {
                     FilterExpressionResult::Bool(true)
                 } else {
@@ -111,11 +111,11 @@ impl FilterExpression {
                 }
             }
             FilterExpression::RelativeQuery { query } => FilterExpressionResult::Nodes(
-                QueryIter::new(env.clone(), current, *query.clone()).collect(),
+                QueryIter::new(env, current, *query.clone()).collect(),
             ),
-            FilterExpression::RootQuery { query } => FilterExpressionResult::Nodes(
-                QueryIter::new(env.clone(), root, *query.clone()).collect(),
-            ),
+            FilterExpression::RootQuery { query } => {
+                FilterExpressionResult::Nodes(QueryIter::new(env, root, *query.clone()).collect())
+            }
             FilterExpression::Function { name, args } => {
                 let fn_ext = env
                     .function_register
@@ -124,7 +124,7 @@ impl FilterExpression {
 
                 let _args = args
                     .iter()
-                    .map(|expr| expr.evaluate(env.clone(), root, current))
+                    .map(|expr| expr.evaluate(env, root, current))
                     .enumerate()
                     .map(|(i, rv)| unpack_result(rv, &fn_ext.sig().param_types, i))
                     .collect();
