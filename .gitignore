@@ -1,3 +1,5 @@
 /target
 .vscode
 flamegraph.svg
+heaptrack*
+perf.data

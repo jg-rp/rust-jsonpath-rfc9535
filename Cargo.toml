@@ -2,3 +2,7 @@
 members = ["crates/*"]
 resolver = "2"
 default-members = ["crates/jsonpath_rfc9535"]
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
