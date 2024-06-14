@@ -6,6 +6,7 @@ An exploration of JSONPath parsing and evaluation in Rust with Python bindings i
 - `crates/jsonpath_rfc9535_pest` is a [pest](https://github.com/pest-parser)-based JSONPath parser, producing a similar AST to the hand-crafted parser.
 - `crates/jsonpath_rfc9535_pest_recursive` is the pest parser producing an AST structured with recursive segments rather than a vector of segments. This structure is inspired by the stalled [jsonpath-reference-implementation](https://github.com/jsonpath-standard/jsonpath-reference-implementation).
 - `crates/jsonpath_rfc9535_serde` implements JSONPath evaluation using serde JSON, based on the pest parser.
+- `crates/jsonpath_rfc9535_iter` is an experimental lazily evaluated implementation of JSONPath.
 
 ## Hand-crafted parser
 
