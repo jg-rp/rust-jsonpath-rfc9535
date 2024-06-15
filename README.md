@@ -7,6 +7,7 @@ An exploration of JSONPath parsing and evaluation in Rust with Python bindings i
 - `crates/jsonpath_rfc9535_pest_recursive` is the pest parser producing an AST structured with recursive segments rather than a vector of segments. This structure is inspired by the stalled [jsonpath-reference-implementation](https://github.com/jsonpath-standard/jsonpath-reference-implementation).
 - `crates/jsonpath_rfc9535_serde` implements JSONPath evaluation using serde JSON, based on the pest parser.
 - `crates/jsonpath_rfc9535_iter` is an experimental lazily evaluated implementation of JSONPath.
+- `crates/jsonpath_rfc9535_locations` is not lazily evaluated, but uses persistent linked lists to build node locations. It outperforms the naive Serde JSON and iterator-based implementations both in execution speed and memory usage, and "feels" much cleaner than the iterator implementation.
 
 ## Hand-crafted parser
 
@@ -151,7 +152,7 @@ Without attempting to optimize the grammar, the pest-based parser benchmarks at 
 
 When benchmarking [JPQ](https://github.com/jg-rp/jpq) with the pest parser, this translates to a slowdown of between 0.03 and 0.04 seconds (409 queries repeated 100 times) during the compile phase. This seems like a good tradeoff.
 
-Benchmarking `crates/jsonpath_rfc9535_serde` on an M2 Mac Mini we get the following results:
+Benchmarking `crates/jsonpath_rfc9535_serde` on lots of small queries with small data on an M2 Mac Mini we get the following results:
 
 ```
 test tests::bench_compile_and_find        ... bench:     789,637 ns/iter (+/- 33,289)
@@ -164,6 +165,31 @@ test tests::bench_just_find_loop          ... bench:     235,477 ns/iter (+/- 1,
 Which shows a 2x performance improvement using Serde JSON over JPQ.
 
 The last two lines show an insignificant difference in performance between code that uses explicit `for` loops and vectors to collect nodes vs extensive use of iterator adapters and `collect()`.
+
+Benchmarking `crates/jsonpath_rfc9535_locations` on lots of small queries with small data on an M2 Mac Mini we get the following results:
+
+```
+test tests::bench_compile_and_find        ... bench:     761,966 ns/iter (+/- 3,041)
+test tests::bench_compile_and_find_values ... bench:     759,604 ns/iter (+/- 47,015)
+test tests::bench_just_compile            ... bench:     561,550 ns/iter (+/- 4,355)
+test tests::bench_just_find               ... bench:     217,069 ns/iter (+/- 4,714)
+```
+
+`crates/jsonpath_rfc9535_locations` is faster and more memory efficient when data gets bigger.
+
+### Peak memory consumption
+
+**Dataset:** small-citylots.json (32MB)  
+**Query:** `$['features']..['properties']`
+
+| Impl                            | Peak RAM | Diff   |
+| ------------------------------- | -------- | ------ |
+| Just serde JSON                 | 179MB    |        |
+| Naive serde JSON                | 376MB    | +197MB |
+| Iter (just values) serde JSON   | 247MB    | +68MB  |
+| Iter (`Rc<Node>`) serde JSON    | 251MB    | +72MB  |
+| Nodes with persistent locations | 182MB    | +3MB   |
+| hiltontj                        | 186MB    | +7MB   |
 
 ## Contributing
 
