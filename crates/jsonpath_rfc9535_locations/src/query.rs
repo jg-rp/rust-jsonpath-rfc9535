@@ -1,3 +1,5 @@
+use std::fmt;
+
 use lazy_static::lazy_static;
 use serde_json::Value;
 
@@ -56,5 +58,19 @@ impl Query {
             }
             false
         })
+    }
+}
+
+impl fmt::Display for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "${}",
+            self.segments
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>()
+                .join("")
+        )
     }
 }

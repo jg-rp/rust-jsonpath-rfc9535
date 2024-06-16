@@ -41,7 +41,7 @@ impl Selector {
         match self {
             Selector::Name { name } => {
                 if let Some((k, v)) = value.as_object().and_then(|x| x.get_key_value(name)) {
-                    vec![Node::new_object_member(v, location.clone(), k.to_owned())]
+                    vec![Node::new_object_member(v, location, k.to_owned())]
                 } else {
                     Vec::new()
                 }
@@ -50,7 +50,7 @@ impl Selector {
                 if let Some(array) = value.as_array() {
                     let norm = norm_index(*index, array.len());
                     if let Some(v) = array.get(norm) {
-                        vec![Node::new_array_element(v, location.clone(), norm)]
+                        vec![Node::new_array_element(v, location, norm)]
                     } else {
                         Vec::new()
                     }
@@ -62,7 +62,7 @@ impl Selector {
                 if let Some(array) = value.as_array() {
                     slice(array, *start, *stop, *step)
                         .into_iter()
-                        .map(|(i, v)| Node::new_array_element(v, location.clone(), i as usize))
+                        .map(|(i, v)| Node::new_array_element(v, location, i as usize))
                         .collect()
                 } else {
                     Vec::new()
@@ -72,11 +72,11 @@ impl Selector {
                 Value::Array(arr) => arr
                     .iter()
                     .enumerate()
-                    .map(|(i, v)| Node::new_array_element(v, location.clone(), i))
+                    .map(|(i, v)| Node::new_array_element(v, location, i))
                     .collect(),
                 Value::Object(obj) => obj
                     .iter()
-                    .map(|(k, v)| Node::new_object_member(v, location.clone(), k.to_owned()))
+                    .map(|(k, v)| Node::new_object_member(v, location, k.to_owned()))
                     .collect(),
                 _ => Vec::new(),
             },
@@ -86,13 +86,13 @@ impl Selector {
                     .enumerate()
                     .map(|(i, v)| (i, v, expression.evaluate(env, root, v)))
                     .filter(|(_, _, r)| is_truthy_ref(r))
-                    .map(|(i, v, _)| Node::new_array_element(v, location.clone(), i))
+                    .map(|(i, v, _)| Node::new_array_element(v, location, i))
                     .collect(),
                 Value::Object(obj) => obj
                     .iter()
                     .map(|(k, v)| (k, v, expression.evaluate(env, root, v)))
                     .filter(|(_, _, r)| is_truthy_ref(r))
-                    .map(|(k, v, _)| Node::new_object_member(v, location.clone(), k.to_owned()))
+                    .map(|(k, v, _)| Node::new_object_member(v, location, k.to_owned()))
                     .collect(),
                 _ => Vec::new(),
             },

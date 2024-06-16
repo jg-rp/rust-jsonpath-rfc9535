@@ -20,14 +20,18 @@ pub enum PathElement {
 }
 
 impl<'v> Node<'v> {
-    pub fn new_array_element(value: &'v Value, location: Location, index: usize) -> Self {
-        location.append(PathElement::Index(index));
-        Node { value, location }
+    pub fn new_array_element(value: &'v Value, location: &Location, index: usize) -> Self {
+        Node {
+            value,
+            location: location.append(PathElement::Index(index)),
+        }
     }
 
-    pub fn new_object_member(value: &'v Value, location: Location, name: String) -> Self {
-        location.append(PathElement::Name(name));
-        Node { value, location }
+    pub fn new_object_member(value: &'v Value, location: &Location, name: String) -> Self {
+        Node {
+            value,
+            location: location.append(PathElement::Name(name)),
+        }
     }
 
     /// The location of this node's value in the query argument as a normalized path.

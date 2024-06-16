@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::{
     env::Environment,
-    node::{Location, NodeList},
+    node::{Location, NodeList, PathElement},
     selector::Selector,
 };
 
@@ -34,7 +34,7 @@ impl Segment {
                 .collect(),
             Segment::Recursive { selectors } => nodes
                 .into_iter()
-                .flat_map(move |node| self.visit(env, node.value, selectors, root, &node.location))
+                .flat_map(move |node| self.visit(env, node.value, selectors, root, node.location))
                 .collect(),
             Segment::Eoi {} => nodes,
         }
@@ -46,7 +46,7 @@ impl Segment {
         value: &'v Value,
         selectors: &Vec<Selector>,
         root: &'v Value,
-        location: &Location,
+        location: Location,
     ) -> NodeList<'v> {
         let mut nodes: NodeList = selectors
             .iter()
@@ -70,15 +70,25 @@ impl Segment {
                 .iter()
                 .enumerate()
                 .flat_map(|(i, v)| {
-                    location.append(crate::node::PathElement::Index(i));
-                    self.visit(env, v, selectors, root, &location)
+                    self.visit(
+                        env,
+                        v,
+                        selectors,
+                        root,
+                        location.append(PathElement::Index(i)),
+                    )
                 })
                 .collect(),
             Value::Object(obj) => obj
                 .iter()
                 .flat_map(|(k, v)| {
-                    location.append(crate::node::PathElement::Name(k.to_owned()));
-                    self.visit(env, v, selectors, root, &location)
+                    self.visit(
+                        env,
+                        v,
+                        selectors,
+                        root,
+                        location.append(PathElement::Name(k.to_owned())),
+                    )
                 })
                 .collect(),
             _ => vec![],

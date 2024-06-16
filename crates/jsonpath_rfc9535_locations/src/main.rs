@@ -14,6 +14,7 @@ fn main() {
     // // let q = "$.features[?@.properties.STREET=='UNKNOWN'].properties.BLOCK_NUM";
     let rv = find(q, &v).unwrap();
     println!("{:?}", rv.len());
+    println!("{:?}", rv.first().unwrap().path());
     // let query = Query::standard(q);
     // println!("{:?}", v.is_object());
     // println!("{:?}", query.unwrap().segments.len());
