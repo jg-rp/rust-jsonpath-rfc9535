@@ -12,6 +12,12 @@ pub struct Environment {
     pub function_register: FunctionRegister,
 }
 
+impl Default for Environment {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Environment {
     pub fn new() -> Self {
         let mut function_register: FunctionRegister = HashMap::new();

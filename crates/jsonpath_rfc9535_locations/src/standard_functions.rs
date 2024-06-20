@@ -109,7 +109,7 @@ impl FunctionExtension for Match {
                             return FilterExpressionResult::Bool(false);
                         }
 
-                        if let Ok(re) = Regex::new(&full_match(&p)) {
+                        if let Ok(re) = Regex::new(&full_match(p)) {
                             let rv = re.is_match(s);
                             cache.push(p.to_owned(), re);
                             FilterExpressionResult::Bool(rv)
@@ -163,7 +163,7 @@ impl FunctionExtension for Search {
                             return FilterExpressionResult::Bool(false);
                         }
 
-                        if let Ok(re) = Regex::new(&map_regex(&p)) {
+                        if let Ok(re) = Regex::new(&map_regex(p)) {
                             let rv = re.is_match(s);
                             cache.push(p.to_owned(), re);
                             FilterExpressionResult::Bool(rv)
