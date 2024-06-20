@@ -118,7 +118,7 @@ impl FilterExpression {
                 let fn_ext = env
                     .function_register
                     .get(name)
-                    .expect(&format!("unknown function '{}'", name));
+                    .unwrap_or_else(|| panic!("unknown function '{}'", name));
 
                 let _args = args
                     .iter()
@@ -253,10 +253,8 @@ impl<'a> FilterExpressionResult<'a> {
             Value::Number(n) => {
                 if n.is_f64() {
                     FilterExpressionResult::Float(n.as_f64().unwrap())
-                } else if n.is_i64() {
-                    FilterExpressionResult::Int(n.as_i64().unwrap())
                 } else {
-                    FilterExpressionResult::Int(n.as_i64().unwrap()) // XXX:
+                    FilterExpressionResult::Int(n.as_i64().unwrap())
                 }
             }
             Value::String(s) => FilterExpressionResult::String(s.to_owned()),
@@ -270,7 +268,7 @@ pub fn is_truthy(rv: FilterExpressionResult) -> bool {
     match rv {
         FilterExpressionResult::Nothing => false,
         FilterExpressionResult::Nodes(nodes) => !nodes.is_empty(),
-        FilterExpressionResult::Bool(v) => v == true,
+        FilterExpressionResult::Bool(v) => v,
         _ => true,
     }
 }
@@ -279,7 +277,7 @@ pub fn is_truthy_ref(rv: &FilterExpressionResult) -> bool {
     match rv {
         FilterExpressionResult::Nothing => false,
         FilterExpressionResult::Nodes(nodes) => !nodes.is_empty(),
-        FilterExpressionResult::Bool(v) => *v == true,
+        FilterExpressionResult::Bool(v) => *v,
         _ => true,
     }
 }
@@ -295,7 +293,7 @@ pub fn logical(
     }
 }
 
-fn nodes_or_singular<'a>(rv: FilterExpressionResult<'a>) -> FilterExpressionResult<'a> {
+fn nodes_or_singular(rv: FilterExpressionResult<'_>) -> FilterExpressionResult<'_> {
     match rv {
         FilterExpressionResult::Nodes(ref nodes) => {
             if nodes.len() == 1 {

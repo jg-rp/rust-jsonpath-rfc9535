@@ -129,19 +129,19 @@ impl fmt::Display for Selector {
 }
 
 fn norm_index(index: i64, length: usize) -> usize {
-    if index < 0 && length >= index.abs() as usize {
+    if index < 0 && length >= index.unsigned_abs() as usize {
         (length as i64 + index) as usize
     } else {
         index as usize
     }
 }
 
-fn slice<'a>(
-    array: &'a Vec<Value>,
+fn slice(
+    array: &[Value],
     start: Option<i64>,
     stop: Option<i64>,
     step: Option<i64>,
-) -> Vec<(i64, &'a Value)> {
+) -> Vec<(i64, &Value)> {
     let array_length = array.len() as i64; // TODO: try_from
     if array_length == 0 {
         return Vec::new();

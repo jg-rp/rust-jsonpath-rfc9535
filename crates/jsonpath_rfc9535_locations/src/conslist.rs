@@ -110,9 +110,9 @@ impl<T> ConsList<T> {
     }
 
     /// Returns an iterator over references to the elements of the list in order
-    pub fn iter<'a>(&'a self) -> Iter<'a, T> {
+    pub fn iter(&self) -> Iter<'_, T> {
         Iter {
-            head: self.front.as_ref().map(|x| &**x),
+            head: self.front.as_deref(),
             nelem: self.len(),
         }
     }
@@ -154,7 +154,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
             None => None,
             Some(head) => {
                 self.nelem -= 1;
-                self.head = head.next.as_ref().map(|next| &**next);
+                self.head = head.next.as_deref();
                 Some(&head.elem)
             }
         }
@@ -179,10 +179,6 @@ impl<T: PartialEq> PartialEq for ConsList<T> {
     fn eq(&self, other: &Self) -> bool {
         self.len() == other.len() && self.iter().zip(other.iter()).all(|(x, y)| x == y)
     }
-
-    fn ne(&self, other: &Self) -> bool {
-        self.len() != other.len() || self.iter().zip(other.iter()).all(|(x, y)| x != y)
-    }
 }
 
 impl<T: PartialOrd> PartialOrd for ConsList<T> {
@@ -194,7 +190,7 @@ impl<T: PartialOrd> PartialOrd for ConsList<T> {
                 (None, None) => return Some(std::cmp::Ordering::Equal),
                 (None, _) => return Some(std::cmp::Ordering::Less),
                 (_, None) => return Some(std::cmp::Ordering::Greater),
-                (Some(x), Some(y)) => match x.partial_cmp(&y) {
+                (Some(x), Some(y)) => match x.partial_cmp(y) {
                     Some(std::cmp::Ordering::Equal) => (),
                     non_eq => return non_eq,
                 },
