@@ -39,25 +39,19 @@ impl Selector {
         location: &Location,
     ) -> NodeList<'v> {
         match self {
-            Selector::Name { name } => {
-                if let Some((k, v)) = value.as_object().and_then(|x| x.get_key_value(name)) {
-                    vec![Node::new_object_member(v, location, k.to_owned())]
-                } else {
-                    Vec::new()
-                }
-            }
-            Selector::Index { index } => {
-                if let Some(array) = value.as_array() {
-                    let norm = norm_index(*index, array.len());
-                    if let Some(v) = array.get(norm) {
-                        vec![Node::new_array_element(v, location, norm)]
-                    } else {
-                        Vec::new()
-                    }
-                } else {
-                    Vec::new()
-                }
-            }
+            Selector::Name { name } => value
+                .as_object()
+                .and_then(|m| m.get_key_value(name))
+                .and_then(|(k, v)| Some(Node::new_object_member(v, location, k.to_owned())))
+                .into_iter()
+                .collect(),
+            Selector::Index { index } => value
+                .as_array()
+                .and_then(|array| Some((norm_index(*index, array.len())?, array)))
+                .and_then(|(i, array)| Some((i, array.get(i)?)))
+                .and_then(|(i, v)| Some(Node::new_array_element(v, location, i)))
+                .into_iter()
+                .collect(),
             Selector::Slice { start, stop, step } => {
                 if let Some(array) = value.as_array() {
                     slice(array, *start, *stop, *step)
@@ -128,11 +122,14 @@ impl fmt::Display for Selector {
     }
 }
 
-fn norm_index(index: i64, length: usize) -> usize {
-    if index < 0 && length >= index.unsigned_abs() as usize {
-        (length as i64 + index) as usize
+fn norm_index(index: i64, length: usize) -> Option<usize> {
+    if index < 0 {
+        index
+            .checked_abs()
+            .and_then(|i| usize::try_from(i).ok())
+            .and_then(|i| length.checked_sub(i))
     } else {
-        index as usize
+        usize::try_from(index).ok()
     }
 }
 
