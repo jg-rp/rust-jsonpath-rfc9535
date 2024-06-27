@@ -54,13 +54,7 @@ impl Selector {
                 .collect(),
             Selector::Slice { start, stop, step } => value
                 .as_array()
-                .and_then(|array| slice(array, *start, *stop, *step))
-                .map(|pairs| {
-                    pairs
-                        .into_iter()
-                        .map(|(i, v)| Node::new_array_element(v, location, i))
-                        .collect::<NodeList>()
-                })
+                .and_then(|array| slice(array, location, *start, *stop, *step))
                 .unwrap_or_default(),
             Selector::Wild {} => match value {
                 Value::Array(arr) => arr
@@ -133,12 +127,13 @@ fn norm_index(index: i64, length: usize) -> Option<usize> {
     }
 }
 
-fn slice(
-    array: &[Value],
+fn slice<'v>(
+    array: &'v [Value],
+    location: &Location,
     start: Option<i64>,
     stop: Option<i64>,
     step: Option<i64>,
-) -> Option<Vec<(usize, &Value)>> {
+) -> Option<NodeList<'v>> {
     let len = array.len() as i128;
 
     if len == 0 {
@@ -185,20 +180,28 @@ fn slice(
         }
     };
 
-    let mut slice: Vec<(usize, &Value)> = Vec::new();
+    let mut slice: NodeList = Vec::new();
 
     if step > 0 {
         let step = usize::try_from(step).ok()?;
         for i in (n_start..n_stop).step_by(step) {
             let index = usize::try_from(i).ok()?;
-            slice.push((index, array.get(index).unwrap()));
+            slice.push(Node::new_array_element(
+                array.get(index).unwrap(),
+                location,
+                index,
+            ));
         }
     } else {
         let step = step as i128;
         let mut i = n_start;
         while i > n_stop {
             let index = usize::try_from(i).ok()?;
-            slice.push((index, array.get(index).unwrap()));
+            slice.push(Node::new_array_element(
+                array.get(index).unwrap(),
+                location,
+                index,
+            ));
             i += step;
         }
     }
