@@ -39,35 +39,23 @@ impl Selector {
         location: &Location,
     ) -> NodeList<'v> {
         match self {
-            Selector::Name { name } => {
-                if let Some((k, v)) = value.as_object().and_then(|x| x.get_key_value(name)) {
-                    vec![Node::new_object_member(v, location, k.to_owned())]
-                } else {
-                    Vec::new()
-                }
-            }
-            Selector::Index { index } => {
-                if let Some(array) = value.as_array() {
-                    let norm = norm_index(*index, array.len());
-                    if let Some(v) = array.get(norm) {
-                        vec![Node::new_array_element(v, location, norm)]
-                    } else {
-                        Vec::new()
-                    }
-                } else {
-                    Vec::new()
-                }
-            }
-            Selector::Slice { start, stop, step } => {
-                if let Some(array) = value.as_array() {
-                    slice(array, *start, *stop, *step)
-                        .into_iter()
-                        .map(|(i, v)| Node::new_array_element(v, location, i as usize))
-                        .collect()
-                } else {
-                    Vec::new()
-                }
-            }
+            Selector::Name { name } => value
+                .as_object()
+                .and_then(|m| m.get_key_value(name))
+                .map(|(k, v)| Node::new_object_member(v, location, k.to_owned()))
+                .into_iter()
+                .collect(),
+            Selector::Index { index } => value
+                .as_array()
+                .and_then(|array| Some((norm_index(*index, array.len())?, array)))
+                .and_then(|(i, array)| Some((i, array.get(i)?)))
+                .map(|(i, v)| Node::new_array_element(v, location, i))
+                .into_iter()
+                .collect(),
+            Selector::Slice { start, stop, step } => value
+                .as_array()
+                .and_then(|array| slice(array, location, *start, *stop, *step))
+                .unwrap_or_default(),
             Selector::Wild {} => match value {
                 Value::Array(arr) => arr
                     .iter()
@@ -128,42 +116,47 @@ impl fmt::Display for Selector {
     }
 }
 
-fn norm_index(index: i64, length: usize) -> usize {
-    if index < 0 && length >= index.unsigned_abs() as usize {
-        (length as i64 + index) as usize
+fn norm_index(index: i64, length: usize) -> Option<usize> {
+    if index < 0 {
+        index
+            .checked_abs()
+            .and_then(|i| usize::try_from(i).ok())
+            .and_then(|i| length.checked_sub(i))
     } else {
-        index as usize
+        usize::try_from(index).ok()
     }
 }
 
-fn slice(
-    array: &[Value],
+fn slice<'v>(
+    array: &'v [Value],
+    location: &Location,
     start: Option<i64>,
     stop: Option<i64>,
     step: Option<i64>,
-) -> Vec<(i64, &Value)> {
-    let array_length = array.len() as i64; // TODO: try_from
-    if array_length == 0 {
-        return Vec::new();
+) -> Option<NodeList<'v>> {
+    let len = array.len() as i128;
+
+    if len == 0 {
+        return None;
     }
 
-    let n_step = step.unwrap_or(1);
+    let step = step.unwrap_or(1);
 
-    if n_step == 0 {
-        return Vec::new();
+    if step == 0 {
+        return None;
     }
 
     let n_start = match start {
         Some(i) => {
             if i < 0 {
-                cmp::max(array_length + i, 0)
+                cmp::max(len + i as i128, 0)
             } else {
-                cmp::min(i, array_length - 1)
+                cmp::min(i as i128, len - 1)
             }
         }
         None => {
-            if n_step < 0 {
-                array_length - 1
+            if step < 0 {
+                len - 1
             } else {
                 0
             }
@@ -173,34 +166,45 @@ fn slice(
     let n_stop = match stop {
         Some(i) => {
             if i < 0 {
-                cmp::max(array_length + i, -1)
+                cmp::max(len + i as i128, -1)
             } else {
-                cmp::min(i, array_length)
+                cmp::min(i as i128, len)
             }
         }
         None => {
-            if n_step < 0 {
+            if step < 0 {
                 -1
             } else {
-                array_length
+                len
             }
         }
     };
 
-    let mut sliced_array: Vec<(i64, &Value)> = Vec::new();
+    let mut slice: NodeList = Vec::new();
 
-    // TODO: try_from instead of as
-    if n_step > 0 {
-        for i in (n_start..n_stop).step_by(n_step as usize) {
-            sliced_array.push((i, array.get(i as usize).unwrap()));
+    if step > 0 {
+        let step = usize::try_from(step).ok()?;
+        for i in (n_start..n_stop).step_by(step) {
+            let index = usize::try_from(i).ok()?;
+            slice.push(Node::new_array_element(
+                array.get(index).unwrap(),
+                location,
+                index,
+            ));
         }
     } else {
+        let step = step as i128;
         let mut i = n_start;
         while i > n_stop {
-            sliced_array.push((i, array.get(i as usize).unwrap()));
-            i += n_step;
+            let index = usize::try_from(i).ok()?;
+            slice.push(Node::new_array_element(
+                array.get(index).unwrap(),
+                location,
+                index,
+            ));
+            i += step;
         }
     }
 
-    sliced_array
+    Some(slice)
 }

@@ -1,3 +1,5 @@
+"""Dump test cases from the JSONPath Compliance Test Suite as calls to valid/invalid macro calls."""
+
 import json
 import re
 import sys
