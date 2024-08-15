@@ -195,6 +195,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonpath_rfc9535_singular"
+version = "0.1.0"
+dependencies = [
+ "iregexp",
+ "itertools",
+ "lazy_static",
+ "lru",
+ "pest",
+ "pest_derive",
+ "regex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
