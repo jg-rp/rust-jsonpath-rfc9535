@@ -125,6 +125,9 @@ comparison_op = {
   | ">"
 }
 
+// TODO: silencing singular_query and/or singular_query_segments leads to
+// undesirable error messaages.
+
 singular_query          = _{ rel_singular_query | abs_singular_query }
 rel_singular_query      =  { current_node_identifier ~ singular_query_segments }
 abs_singular_query      =  { root_identifier ~ singular_query_segments }
