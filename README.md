@@ -2,14 +2,13 @@
 
 An exploration of JSONPath parsing and evaluation in Rust with Python bindings in mind.
 
-TL;DR - Look at the implementation of `crates/jsonpath_rfc9535_locations`. It shows the approach I'll be taking with [JPQ](https://github.com/jg-rp/jpq). All these crates are kept here for reference.
-
 - `crates/jsonpath_rfc9535` is a hand-crafted lexer and parser for JSONPath producing a JSON implementation agnostic abstract syntax tree, following the JSONPath model described in RFC 9535.
 - `crates/jsonpath_rfc9535_pest` is a [pest](https://github.com/pest-parser)-based JSONPath parser, producing a similar AST to the hand-crafted parser.
 - `crates/jsonpath_rfc9535_pest_recursive` is the pest parser producing an AST structured with recursive segments rather than a vector of segments. This structure is inspired by the stalled [jsonpath-reference-implementation](https://github.com/jsonpath-standard/jsonpath-reference-implementation).
 - `crates/jsonpath_rfc9535_serde` implements JSONPath evaluation using Serde JSON, based on the pest parser.
 - `crates/jsonpath_rfc9535_iter` is an experimental lazily evaluated implementation of JSONPath.
 - `crates/jsonpath_rfc9535_locations` is not lazily evaluated, but uses persistent linked lists to build node locations. It outperforms the naive Serde JSON and iterator-based implementations both in execution speed and memory usage, and "feels" much cleaner than the iterator implementation.
+- `crates/jsonpath_rfc9535_singular` is a "fork" of `crates/jsonpath_rfc9535_locations` with a non-standard _singular query selector_.
 
 ## Hand-crafted parser
 
