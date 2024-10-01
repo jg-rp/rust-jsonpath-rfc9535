@@ -10,6 +10,7 @@ pub mod query;
 mod segment;
 mod selector;
 pub mod standard_functions;
+mod unescape;
 
 pub use jsonpath::find;
 pub use jsonpath::ENV;
