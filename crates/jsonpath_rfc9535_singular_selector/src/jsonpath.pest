@@ -1,7 +1,8 @@
-jsonpath = _{ SOI ~ jsonpath_query ~ EOI }
+jsonpath = _{ SOI ~ (jsonpath_query | implicit_root_query) ~ EOI }
 
-jsonpath_query = _{ root_identifier ~ segments }
-segments       = _{ (S ~ segment)* }
+jsonpath_query      = _{ root_identifier ~ segments }
+implicit_root_query = _{ implicit_root_segment ~ segments }
+segments            = _{ (S ~ segment)* }
 
 B = _{ "\x20" | "\x09" | "\x0A" | "\x0D" }
 S = _{ B* }
@@ -85,7 +86,7 @@ filter_selector         =  { "?" ~ S ~ logical_expr }
 logical_expr            = _{ logical_or_expr }
 logical_or_expr         =  { logical_and_expr ~ (S ~ "||" ~ S ~ logical_and_expr)* }
 logical_and_expr        =  { basic_expr ~ (S ~ "&&" ~ S ~ basic_expr)* }
-singular_query_selector =  { root_identifier ~ singular_query_segments }
+singular_query_selector =  { (root_identifier ~ singular_query_segments) | implicit_root_singular_query_segments }
 
 basic_expr = _{
     paren_expr
@@ -128,14 +129,20 @@ comparison_op = {
 // TODO: silencing singular_query and/or singular_query_segments leads to
 // undesirable error messaages.
 
-singular_query          = _{ rel_singular_query | abs_singular_query }
-rel_singular_query      =  { current_node_identifier ~ singular_query_segments }
-abs_singular_query      =  { root_identifier ~ singular_query_segments }
-singular_query_segments = _{ (S ~ (name_segment | index_segment))* }
+singular_query                        = _{ rel_singular_query | abs_singular_query }
+rel_singular_query                    =  { current_node_identifier ~ singular_query_segments }
+abs_singular_query                    =  { root_identifier ~ singular_query_segments }
+singular_query_segments               = _{ (S ~ (name_segment | index_segment))* }
+implicit_root_singular_query_segments = _{ (implicit_root_name_segment | index_segment) ~ singular_query_segments }
 
 name_segment = {
     ("[" ~ name_selector ~ "]")
   | ("." ~ member_name_shorthand)
+}
+
+implicit_root_name_segment = {
+    ("[" ~ name_selector ~ "]")
+  | member_name_shorthand
 }
 
 index_segment       =  { "[" ~ index_selector ~ "]" }
@@ -163,6 +170,11 @@ function_argument = _{
 segment = _{
     child_segment
   | descendant_segment
+}
+
+implicit_root_segment = {
+    bracketed_selection
+  | member_name_shorthand
 }
 
 child_segment = {

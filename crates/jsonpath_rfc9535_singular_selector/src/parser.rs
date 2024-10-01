@@ -56,17 +56,19 @@ impl JSONPathParser {
 
     fn parse_segment(&self, segment: Pair<Rule>) -> Result<Segment, JSONPathError> {
         Ok(match segment.as_rule() {
-            Rule::child_segment => Segment::Child {
+            Rule::child_segment | Rule::implicit_root_segment => Segment::Child {
                 selectors: self.parse_segment_inner(segment.into_inner().next().unwrap())?,
             },
             Rule::descendant_segment => Segment::Recursive {
                 selectors: self.parse_segment_inner(segment.into_inner().next().unwrap())?,
             },
-            Rule::name_segment | Rule::index_segment => Segment::Child {
-                selectors: vec![self.parse_selector(segment.into_inner().next().unwrap())?],
-            },
+            Rule::name_segment | Rule::index_segment | Rule::implicit_root_name_segment => {
+                Segment::Child {
+                    selectors: vec![self.parse_selector(segment.into_inner().next().unwrap())?],
+                }
+            }
             Rule::EOI => Segment::Eoi,
-            _ => unreachable!(),
+            _ => unreachable!("{:#?}", segment),
         })
     }
 
@@ -107,7 +109,7 @@ impl JSONPathParser {
                 name: selector.as_str().to_owned(),
             },
             Rule::singular_query_selector => self.parse_singular_query_selector(selector)?,
-            _ => unreachable!(),
+            _ => unreachable!("{:#?}", selector),
         })
     }
 
