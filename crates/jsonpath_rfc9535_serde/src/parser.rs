@@ -14,6 +14,7 @@ use crate::{
     ast::{ComparisonOperator, FilterExpression, LogicalOperator, Query, Segment, Selector},
     errors::JSONPathError,
     function::{standard_functions, ExpressionType, FunctionSignature},
+    unescape::unescape,
 };
 
 #[derive(Parser)]
@@ -87,10 +88,10 @@ impl JSONPathParser {
     fn parse_selector(&self, selector: Pair<Rule>) -> Result<Selector, JSONPathError> {
         Ok(match selector.as_rule() {
             Rule::double_quoted => Selector::Name {
-                name: unescape_string(selector.as_str()),
+                name: unescape(selector.as_str())?,
             },
             Rule::single_quoted => Selector::Name {
-                name: unescape_string(&selector.as_str().replace("\\'", "'")),
+                name: unescape(&selector.as_str().replace("\\'", "'"))?,
             },
             Rule::wildcard_selector => Selector::Wild,
             Rule::slice_selector => self.parse_slice_selector(selector)?,
@@ -240,10 +241,10 @@ impl JSONPathParser {
         Ok(match expr.as_rule() {
             Rule::number => self.parse_number(expr)?,
             Rule::double_quoted => FilterExpression::String {
-                value: unescape_string(expr.as_str()),
+                value: unescape(expr.as_str())?,
             },
             Rule::single_quoted => FilterExpression::String {
-                value: unescape_string(&expr.as_str().replace("\\'", "'")),
+                value: unescape(&expr.as_str().replace("\\'", "'"))?,
             },
             Rule::true_literal => FilterExpression::True,
             Rule::false_literal => FilterExpression::False,
@@ -391,10 +392,10 @@ impl JSONPathParser {
         Ok(match expr.as_rule() {
             Rule::number => self.parse_number(expr)?,
             Rule::double_quoted => FilterExpression::String {
-                value: unescape_string(expr.as_str()),
+                value: unescape(expr.as_str())?,
             },
             Rule::single_quoted => FilterExpression::String {
-                value: unescape_string(&expr.as_str().replace("\\'", "'")),
+                value: unescape(&expr.as_str().replace("\\'", "'"))?,
             },
             Rule::true_literal => FilterExpression::True,
             Rule::false_literal => FilterExpression::False,
@@ -604,71 +605,6 @@ impl JSONPathParser {
             _ => false,
         }
     }
-}
-
-fn unescape_string(value: &str) -> String {
-    let chars = value.chars().collect::<Vec<char>>();
-    let length = chars.len();
-    let mut rv = String::new();
-    let mut index: usize = 0;
-
-    while index < length {
-        match chars[index] {
-            '\\' => {
-                index += 1;
-
-                match chars[index] {
-                    '"' => rv.push('"'),
-                    '\\' => rv.push('\\'),
-                    '/' => rv.push('/'),
-                    'b' => rv.push('\x08'),
-                    'f' => rv.push('\x0C'),
-                    'n' => rv.push('\n'),
-                    'r' => rv.push('\r'),
-                    't' => rv.push('\t'),
-                    'u' => {
-                        index += 1;
-
-                        let digits = chars
-                            .get(index..index + 4)
-                            .unwrap()
-                            .iter()
-                            .collect::<String>();
-
-                        let mut codepoint = u32::from_str_radix(&digits, 16).unwrap();
-
-                        if index + 5 < length && chars[index + 4] == '\\' && chars[index + 5] == 'u'
-                        {
-                            let digits = &chars
-                                .get(index + 6..index + 10)
-                                .unwrap()
-                                .iter()
-                                .collect::<String>();
-
-                            let low_surrogate = u32::from_str_radix(digits, 16).unwrap();
-
-                            codepoint =
-                                0x10000 + (((codepoint & 0x03FF) << 10) | (low_surrogate & 0x03FF));
-
-                            index += 6;
-                        }
-
-                        let unescaped = char::from_u32(codepoint).unwrap();
-                        rv.push(unescaped);
-                        index += 3;
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            c => {
-                rv.push(c);
-            }
-        }
-
-        index += 1;
-    }
-
-    rv
 }
 
 #[cfg(test)]

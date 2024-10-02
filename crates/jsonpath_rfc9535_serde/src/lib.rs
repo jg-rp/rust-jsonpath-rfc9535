@@ -5,6 +5,7 @@ pub mod function;
 pub mod jsonpath;
 pub mod parser;
 pub mod standard_functions;
+mod unescape;
 
 pub use ast::Query;
 pub use jsonpath::find;

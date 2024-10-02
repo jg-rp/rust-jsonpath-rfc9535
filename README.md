@@ -8,7 +8,7 @@ An exploration of JSONPath parsing and evaluation in Rust with Python bindings i
 - `crates/jsonpath_rfc9535_serde` implements JSONPath evaluation using Serde JSON, based on the pest parser.
 - `crates/jsonpath_rfc9535_iter` is an experimental lazily evaluated implementation of JSONPath.
 - `crates/jsonpath_rfc9535_locations` is not lazily evaluated, but uses persistent linked lists to build node locations. It outperforms the naive Serde JSON and iterator-based implementations both in execution speed and memory usage, and "feels" much cleaner than the iterator implementation.
-- `crates/jsonpath_rfc9535_singular` is a "fork" of `crates/jsonpath_rfc9535_locations` with a non-standard _singular query selector_.
+- `crates/jsonpath_rfc9535_singular` is a "fork" of `crates/jsonpath_rfc9535_locations` with a non-standard _singular query selector_ and _implicit root identifier_.
 
 ## Hand-crafted parser
 
